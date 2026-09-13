@@ -10,17 +10,7 @@ const port = Number(process.env.PORT || 3000);
 const bots = [
   { name: 'email-bot', status: 'cloudflare-fallback', url: process.env.EMAIL_BOT_URL || 'https://email-bot.2401055.workers.dev' },
   { name: 'ai-skills-bot-site', status: 'integrated', url: process.env.AI_SKILLS_SITE_URL || 'https://ai-skills-bot-site.2401055.workers.dev' },
-  { name: 'echo-eyes-bot', status: 'cloudflare-fallback', url: process.env.ECHO_EYES_BOT_URL || 'https://bot.joserv.dpdns.org' },
-  { name: 'echo-eyes-egx', status: 'cloudflare-fallback', url: process.env.ECHO_EYES_EGX_URL || 'https://echo-eyes-egx.2401055.workers.dev' },
-  { name: 'echo-eyes-play-v2', status: 'cloudflare-fallback', url: process.env.ECHO_EYES_PLAY_URL || 'https://play.joserv.dpdns.org' },
-  { name: 'echo-eyes-port', status: 'cloudflare-fallback', url: process.env.ECHO_EYES_PORT_URL || 'https://echo-eyes-port.2401055.workers.dev' },
-  { name: 'echo-eyes-proxy', status: 'cloudflare-fallback', url: process.env.ECHO_EYES_PROXY_URL || 'https://echo-eyes-proxy.2401055.workers.dev' },
-  { name: 'iot-security-monitor', status: 'cloudflare-fallback', url: process.env.IOT_MONITOR_URL || 'https://nada.dpdns.org' },
-  { name: 'joserv-siem', status: 'cloudflare-fallback', url: process.env.JOSERV_SIEM_URL || 'https://joserv-siem.2401055.workers.dev' },
-  { name: 'joserv-site', status: 'cloudflare-fallback', url: process.env.JOSERV_SITE_URL || 'https://joserv.dpdns.org' },
-  { name: 'mytoolstown-automation', status: 'cloudflare-fallback', url: process.env.MYTOOLSTOWN_URL || 'https://mytoolstown-automation.2401055.workers.dev' },
-  { name: 'url-shortener', status: 'cloudflare-fallback', url: process.env.URL_SHORTENER_URL || 'https://url-shortener.2401055.workers.dev' },
-  { name: 'website-monitor', status: 'cloudflare-fallback', url: process.env.WEBSITE_MONITOR_URL || 'https://website-monitor.2401055.workers.dev' }
+  { name: 'mytoolstown-automation', status: 'cloudflare-fallback', url: process.env.MYTOOLSTOWN_URL || 'https://mytoolstown-automation.2401055.workers.dev' }
 ];
 
 const railwayServices = [

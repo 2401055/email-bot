@@ -13,10 +13,6 @@
 
 - email-bot: https://email-bot.2401055.workers.dev
 - ai-skills-bot-site: https://ai-skills-bot-site.2401055.workers.dev
-- echo-eyes-bot: https://bot.joserv.dpdns.org
-- echo-eyes-play-v2: https://play.joserv.dpdns.org
-- iot-security-monitor: https://nada.dpdns.org
-- joserv-site: https://joserv.dpdns.org
 
 ## Secrets
 
