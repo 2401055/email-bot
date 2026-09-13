@@ -16,13 +16,13 @@ const bots = [
   { name: 'mytoolstown-automation', status: 'cloudflare-fallback', url: process.env.MYTOOLSTOWN_URL || 'https://mytoolstown-automation.2401055.workers.dev' }
 ];
 const railwayServices = [
-  { name: 'searxng', title: 'SearXNG', category: 'search', port: 8080, path: 'railway-services/searxng', status: 'ready-with-config', needs: ['persistent volumes', 'optional Valkey'] },
-  { name: 'reactive-resume', title: 'Reactive Resume', category: 'productivity', port: 3000, path: 'railway-services/reactive-resume', status: 'ready-with-config', needs: ['PostgreSQL', 'APP_URL, DATABASE_URL, AUTH_SECRET'] },
-  { name: 'changedetection-io', title: 'changedetection.io', category: 'monitoring', port: 5000, path: 'railway-services/changedetection-io', status: 'ready-with-config', needs: ['datastore volume', 'optional browser service'] },
-  { name: 'suwayomi', title: 'Suwayomi', category: 'media', port: 4567, path: 'railway-services/suwayomi', status: 'ready-with-config', needs: ['persistent storage'] },
-  { name: 'libretranslate', title: 'LibreTranslate', category: 'ai', port: 5000, path: 'railway-services/libretranslate', status: 'ready-with-config', needs: ['RAM and model storage'] },
-  { name: 'archivebox', title: 'ArchiveBox', category: 'archiving', port: 8000, path: 'railway-services/archivebox', status: 'ready-with-config', needs: ['data volume', 'backups'] },
-  { name: 'vaultwarden', title: 'Vaultwarden', category: 'security', port: 80, path: 'railway-services/vaultwarden', status: 'ready-with-config', needs: ['data volume', 'HTTPS and backups'] }
+  { name: 'searxng', title: 'SearXNG', category: 'search', port: 8080, path: 'railway-services/searxng', status: 'ready-with-config', env: 'SEARXNG_URL', needs: ['persistent volumes', 'optional Valkey'] },
+  { name: 'reactive-resume', title: 'Reactive Resume', category: 'productivity', port: 3000, path: 'railway-services/reactive-resume', status: 'ready-with-config', env: 'REACTIVE_RESUME_URL', needs: ['PostgreSQL', 'APP_URL, DATABASE_URL, AUTH_SECRET'] },
+  { name: 'changedetection-io', title: 'changedetection.io', category: 'monitoring', port: 5000, path: 'railway-services/changedetection-io', status: 'ready-with-config', env: 'CHANGEDETECTION_URL', needs: ['datastore volume', 'optional browser service'] },
+  { name: 'suwayomi', title: 'Suwayomi', category: 'media', port: 4567, path: 'railway-services/suwayomi', status: 'ready-with-config', env: 'SUWAYOMI_URL', needs: ['persistent storage'] },
+  { name: 'libretranslate', title: 'LibreTranslate', category: 'ai', port: 5000, path: 'railway-services/libretranslate', status: 'ready-with-config', env: 'LIBRETRANSLATE_URL', needs: ['RAM and model storage'] },
+  { name: 'archivebox', title: 'ArchiveBox', category: 'archiving', port: 8000, path: 'railway-services/archivebox', status: 'ready-with-config', env: 'ARCHIVEBOX_URL', needs: ['data volume', 'backups'] },
+  { name: 'vaultwarden', title: 'Vaultwarden', category: 'security', port: 80, path: 'railway-services/vaultwarden', status: 'ready-with-config', env: 'VAULTWARDEN_URL', needs: ['data volume', 'HTTPS and backups'] }
 ];
 const projectInventory = [
   { name: 'Cobalt', status: 'source-required', railway: 'candidate' },
@@ -42,8 +42,10 @@ function isLogged(id) { const s = userState(id); return s.loggedIn && s.expires 
 function menuFor(id) { return isLogged(id) ? telegramKeyboard : { keyboard: [['Start']], resize_keyboard: true }; }
 async function tg(method, payload) { const token = process.env.TELEGRAM_BOT_TOKEN; if (!token) return false; const r = await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }); return r.ok; }
 async function reply(id, text, keyboard = menuFor(id)) { return tg('sendMessage', { chat_id: id, text, reply_markup: keyboard, disable_web_page_preview: true }); }
-function railwayText() { return ['خدمات Railway المجهزة:', ...railwayServices.map((x, i) => `${i + 1}. ${x.title} — ${x.status}`), '', 'للتفاصيل: /project <name>'].join('\n'); }
-function projectText(name) { const x = railwayServices.find(p => p.name.toLowerCase() === String(name || '').toLowerCase() || p.title.toLowerCase() === String(name || '').toLowerCase()); return x ? [`${x.title}`, `الحالة: ${x.status}`, `التصنيف: ${x.category}`, `المنفذ: ${x.port}`, `المسار: ${x.path}`, `المتطلبات: ${x.needs.join('؛ ')}`].join('\n') : 'المشروع غير موجود. استخدم /projects.'; }
+function serviceUrl(x) { return x.env ? String(process.env[x.env] || '').replace(/\/$/, '') : ''; }
+async function serviceHealth(x) { const url = serviceUrl(x); if (!url) return { state: 'غير مربوط', url: '' }; try { const r = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(4000) }); return { state: r.ok ? `يعمل (${r.status})` : `استجابة ${r.status}`, url }; } catch { return { state: 'غير متاح', url }; } }
+async function railwayText() { const rows = await Promise.all(railwayServices.map(async (x, i) => { const h = await serviceHealth(x); return `${i + 1}. ${x.title} — ${h.state}${h.url ? `\n   ${h.url}` : ''}`; })); return ['خدمات Railway:', ...rows, '', 'للتفاصيل: /project <name>'].join('\n'); }
+async function projectText(name) { const x = railwayServices.find(p => p.name.toLowerCase() === String(name || '').toLowerCase() || p.title.toLowerCase() === String(name || '').toLowerCase()); if (!x) return 'المشروع غير موجود. استخدم /projects.'; const h = await serviceHealth(x); return [`${x.title}`, `الحالة: ${h.state}`, h.url ? `الرابط: ${h.url}` : 'الرابط: غير مضبوط', `التصنيف: ${x.category}`, `المنفذ: ${x.port}`, `المسار: ${x.path}`, `المتطلبات: ${x.needs.join('؛ ')}`].join('\n'); }
 function botsText() { return ['البوتات الموجودة داخل Email Bot:', ...bots.map(x => `${x.name} — ${x.status}`)].join('\n'); }
 async function stockText() {
   try { const r = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/COMI.CA?interval=1d&range=1d', { headers: { 'User-Agent': 'EmailBot/1.0' } }); const x = await r.json(); const m = x.chart.result[0].meta; return `بيانات COMI (EGX)\nالسعر: ${m.regularMarketPrice ?? '-'}\nالتغير: ${m.regularMarketChangePercent ?? '-'}%`; } catch { return 'تعذر قراءة بيانات السهم حاليًا.'; }
@@ -55,8 +57,8 @@ async function handleTelegram(update) {
   if (cmd === '/start' || text === 'Start') { s.stage = 'password'; return reply(id, 'اكتب كلمة المرور', { keyboard: [['Start']], resize_keyboard: true }); }
   if (!isLogged(id)) { if (s.stage === 'password' && process.env.BOT_LOGIN_PASSWORD && text === process.env.BOT_LOGIN_PASSWORD) { s.loggedIn = true; s.expires = Date.now() + 86400000; s.stage = null; return reply(id, 'تم تسجيل الدخول. اختر الخدمة.'); } return reply(id, process.env.BOT_LOGIN_PASSWORD ? 'اضغط Start ثم اكتب كلمة المرور' : 'BOT_LOGIN_PASSWORD غير مضبوط في Railway Variables.', { keyboard: [['Start']], resize_keyboard: true }); }
   if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر المتاحة:\nEmail — البريد\nبيانات السهم — EGX\n/projects /project <name> /bots /health');
-  if (cmd === '/projects' || text === 'Railway Projects') return reply(id, railwayText());
-  if (cmd === '/project') return reply(id, projectText(text.split(/\s+/).slice(1).join(' ')));
+  if (cmd === '/projects' || text === 'Railway Projects') return reply(id, await railwayText());
+  if (cmd === '/project') return reply(id, await projectText(text.split(/\s+/).slice(1).join(' ')));
   if (cmd === '/bots') return reply(id, botsText());
   if (text === 'Email') { s.stage = null; return reply(id, 'اختر خدمة البريد', emailKeyboard); }
   if (text === 'بيانات السهم') return reply(id, await stockText());
