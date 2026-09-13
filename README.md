@@ -52,3 +52,19 @@ EMAIL_FROM=noreply@example.com
 EMAIL_DOMAIN=example.com
 ```
 
+
+## Automatic multi-service Railway setup
+
+The repository now includes `.railway/railway.ts`, Railway Infrastructure as Code for the whole project. It declares the Email Bot service, all seven application services, a PostgreSQL service for Reactive Resume, a Redis/Valkey service, and persistent volumes for each workload. It also connects Reactive Resume to PostgreSQL and the services that use cache to Redis/Valkey.
+
+Railway evaluates this file through the Railway CLI. After creating or linking the Railway project to this repository, run:
+
+```bash
+npm install
+railway login
+railway link
+railway config plan
+railway config apply
+```
+
+`config plan` previews the resources; `config apply` creates the services and resources after confirmation. A GitHub Repo selection alone deploys one service and does not create the complete dependency graph; the IaC apply is the supported one-project automation step. Secrets such as Telegram, Resend, and AI keys remain Railway Variables and are intentionally not stored in GitHub.
