@@ -1,20 +1,35 @@
 # Email Bot Hub — Railway
 
-This is the safe first-stage integration for the Cloudflare Workers in the account. It serves the `ai-skills-bot-site` static UI inside the Email Bot service and exposes `/health`, `/api/bots`, and `/cf/<bot-name>/...`.
+هذا المستودع هو نقطة الدمج المركزية: واجهة AI Skills، كتالوج الخدمات المجهزة لـRailway، وقائمة Workers الموجودة على Cloudflare، مع بوابة موحدة وحالة تشغيل قابلة للفحص.
 
-## Important architecture
+## واجهات الدمج
 
-The current mode is a **hybrid Railway bridge**: the hub runs on Railway, while existing Cloudflare Workers remain the bot backends until each Worker is ported and tested. This prevents an outage and avoids copying Cloudflare KV/D1/Workers AI secrets into GitHub. The original Workers are not deleted or changed.
+- `/`: واجهة Email Bot Hub وAI Skills وكتالوج الخدمات.
+- `/health`: فحص الخدمة.
+- `/api/bots`: قائمة البوتات المرتبطة.
+- `/api/railway-services`: الخدمات السبعة المجهزة لـRailway ومتطلباتها.
+- `/api/projects`: الخدمات الجاهزة وبقية المشاريع وحالتها.
+- `/api/bot-menu`: قائمة موحدة قابلة للاستخدام في واجهة أو Telegram Bot.
+- `/cf/<bot-name>/...`: بوابة اختيارية إلى Worker موجود على Cloudflare.
 
-## Railway
+## طريقة التشغيل على Railway
 
-Deploy the repository root as one Railway service. Railway will use the Dockerfile and listen on the injected `PORT`. Generate a Railway domain and check `/health` and `/api/bots`.
+انشر جذر المستودع كخدمة Email Bot Hub. سيستخدم Railway `Dockerfile` و`railway.json` ويستمع إلى متغير `PORT` الذي توفره Railway. بعد إنشاء Domain اختبر `/health` و`/api/railway-services` و`/api/bot-menu`.
 
-## Required next migration steps
+## الخدمات المدمجة
 
-1. Add Telegram, Resend, D1/KV, and Workers AI replacements as Railway Variables/services only after a migration design is approved.
-2. Port one bot at a time and test its Telegram webhook using a separate bot token or controlled cutover.
-3. Move DNS/webhooks only after health checks pass.
-4. Keep secrets out of GitHub; rotate any token that has ever been exposed in source.
+تعريفات الخدمات موجودة في `railway-services/`:
 
-The seven Docker service definitions from `cloudflare-railway-projects` are referenced under `railway-services/` and are not automatically started by this hub.
+1. SearXNG
+2. Reactive Resume
+3. changedetection.io
+4. Suwayomi
+5. LibreTranslate
+6. ArchiveBox
+7. Vaultwarden
+
+هي مدمجة في المستودع والكتالوج، لكن كل خدمة تحتاج Railway Service مستقلًا وVolumes/Database/Variables الخاصة بها. لا يمكن تشغيلها كلها داخل Container Email Bot واحد؛ تشغيلها كخدمات مستقلة داخل نفس Railway Project هو التصميم الصحيح.
+
+## Cloudflare وTelegram
+
+الوضع الحالي Hybrid آمن: Workers الأصلية تظل Backend احتياطيًا حتى يتم نقل كل بوت واختباره على حدة. لا يتم نسخ Telegram tokens أو Resend keys أو KV/D1/Workers AI secrets إلى GitHub. يتم وضعها في Railway Variables أو الخدمات البديلة فقط بعد اختبار كل عملية نقل.
