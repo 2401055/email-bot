@@ -91,3 +91,5 @@ export default defineRailway(() => {
     ],
   });
 });
+
+// Railway IaC deployment trigger: services, databases, and volumes are managed together.
