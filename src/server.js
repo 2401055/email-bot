@@ -7,7 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT || 3000);
 const sessions = new Map();
 const addresses = new Map();
-const telegramKeyboard = { keyboard: [['Email'], ['Social Media Skills'], ['UI UX Pro Max'], ['بيانات السهم'],    ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
+const telegramKeyboard = { keyboard: [['Email'], ['بيانات السهم'], ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
 const emailKeyboard = { keyboard: [['New address', 'My addresses'], ['Send email', 'Home']], resize_keyboard: true, is_persistent: true };
 
 const bots = [
@@ -45,14 +45,6 @@ async function reply(id, text, keyboard = menuFor(id)) { return tg('sendMessage'
 function railwayText() { return ['خدمات Railway المجهزة:', ...railwayServices.map((x, i) => `${i + 1}. ${x.title} — ${x.status}`), '', 'للتفاصيل: /project <name>'].join('\n'); }
 function projectText(name) { const x = railwayServices.find(p => p.name.toLowerCase() === String(name || '').toLowerCase() || p.title.toLowerCase() === String(name || '').toLowerCase()); return x ? [`${x.title}`, `الحالة: ${x.status}`, `التصنيف: ${x.category}`, `المنفذ: ${x.port}`, `المسار: ${x.path}`, `المتطلبات: ${x.needs.join('؛ ')}`].join('\n') : 'المشروع غير موجود. استخدم /projects.'; }
 function botsText() { return ['البوتات الموجودة داخل Email Bot:', ...bots.map(x => `${x.name} — ${x.status}`)].join('\n'); }
-async function aiGenerate(mode, prompt) {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return `تم استلام طلب ${mode}، لكن مفتاح مزود الذكاء الاصطناعي غير مضبوط في Railway Variables.`;
-  const base = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
-  const r = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-4o-mini', messages: [{ role: 'system', content: `You are ${mode} inside a Telegram bot. Answer Arabic, practical, and safe. Do not publish or request credentials.` }, { role: 'user', content: prompt }] }) });
-  if (!r.ok) return 'تعذر تشغيل مزود الذكاء الاصطناعي حاليًا.';
-  const x = await r.json(); return x.choices?.[0]?.message?.content || 'لم تصل نتيجة.';
-}
 async function stockText() {
   try { const r = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/COMI.CA?interval=1d&range=1d', { headers: { 'User-Agent': 'EmailBot/1.0' } }); const x = await r.json(); const m = x.chart.result[0].meta; return `بيانات COMI (EGX)\nالسعر: ${m.regularMarketPrice ?? '-'}\nالتغير: ${m.regularMarketChangePercent ?? '-'}%`; } catch { return 'تعذر قراءة بيانات السهم حاليًا.'; }
 }
@@ -62,15 +54,11 @@ async function handleTelegram(update) {
   const id = String(m.chat.id), text = String(m.text || '').trim(), s = userState(id), cmd = text.split(/\s+/)[0].toLowerCase();
   if (cmd === '/start' || text === 'Start') { s.stage = 'password'; return reply(id, 'اكتب كلمة المرور', { keyboard: [['Start']], resize_keyboard: true }); }
   if (!isLogged(id)) { if (s.stage === 'password' && process.env.BOT_LOGIN_PASSWORD && text === process.env.BOT_LOGIN_PASSWORD) { s.loggedIn = true; s.expires = Date.now() + 86400000; s.stage = null; return reply(id, 'تم تسجيل الدخول. اختر الخدمة.'); } return reply(id, process.env.BOT_LOGIN_PASSWORD ? 'اضغط Start ثم اكتب كلمة المرور' : 'BOT_LOGIN_PASSWORD غير مضبوط في Railway Variables.', { keyboard: [['Start']], resize_keyboard: true }); }
-  if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر الأصلية والجديدة:\nEmail — البريد\nSocial Media Skills — محتوى\nUI UX Pro Max — تصميم واجهة\nبيانات السهم — EGX\n/projects /project <name> /bots /health');
+  if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر المتاحة:\nEmail — البريد\nبيانات السهم — EGX\n/projects /project <name> /bots /health');
   if (cmd === '/projects' || text === 'Railway Projects') return reply(id, railwayText());
   if (cmd === '/project') return reply(id, projectText(text.split(/\s+/).slice(1).join(' ')));
   if (cmd === '/bots') return reply(id, botsText());
-  if (cmd === '/skills') return reply(id, 'Social Media Skills وUI UX Pro Max متاحان من القائمة.');
   if (text === 'Email') { s.stage = null; return reply(id, 'اختر خدمة البريد', emailKeyboard); }
-  if (text === 'Social Media Skills') { s.stage = 'social'; return reply(id, 'اكتب طلب المحتوى: منشور، Hook، Content Matrix، سكربت Reels أو تعليق مثبت.'); }
-  if (text === 'UI UX Pro Max') { s.stage = 'ux'; return reply(id, 'اكتب وصف الموقع أو الواجهة التي تريد تصميمها.'); }
-  if (s.stage === 'social' || s.stage === 'ux') { const mode = s.stage === 'social' ? 'Social Media Skills' : 'UI UX Pro Max'; s.stage = null; return reply(id, await aiGenerate(mode, text)); }
   if (text === 'بيانات السهم') return reply(id, await stockText());
   if (text === 'New address') { s.stage = 'new-address'; return reply(id, 'اكتب اسم العنوان مثل support', emailKeyboard); }
   if (text === 'My addresses') return reply(id, addresses.get(id)?.join(', ') || 'لا توجد عناوين', emailKeyboard);
@@ -90,7 +78,7 @@ const server = http.createServer(async (req, res) => {
   if (u.pathname === '/api/bots') return send(res, 200, JSON.stringify({ ok: true, bots }, null, 2));
   if (u.pathname === '/api/railway-services') return send(res, 200, JSON.stringify({ ok: true, services: railwayServices }, null, 2));
   if (u.pathname === '/api/projects') return send(res, 200, JSON.stringify({ ok: true, prepared: railwayServices, inventory: projectInventory }, null, 2));
-  if (u.pathname === '/api/bot-menu') return send(res, 200, JSON.stringify({ ok: true, original: ['Email', 'Social Media Skills', 'UI UX Pro Max', 'بيانات السهم'], new: ['Railway Projects', '/projects', '/project <name>', '/bots', '/health'], bots }, null, 2));
+  if (u.pathname === '/api/bot-menu') return send(res, 200, JSON.stringify({ ok: true, original: ['Email', 'بيانات السهم'], new: ['Railway Projects', '/projects', '/project <name>', '/bots', '/health'], bots }, null, 2));
   if (u.pathname.startsWith('/cf/')) { const name = u.pathname.split('/')[2]; const b = bots.find(x => x.name === name); if (!b) return send(res, 404, JSON.stringify({ ok: false, error: 'unknown bot' })); return proxy(req, res, `${b.url}/${u.pathname.split('/').slice(3).join('/')}${u.search}`); }
   const file = u.pathname === '/' ? '/index.html' : u.pathname; const full = path.resolve(root, 'site', file.slice(1)); if (!full.startsWith(path.resolve(root, 'site')) || !fs.existsSync(full)) return send(res, 404, 'Not Found', 'text/plain'); return send(res, 200, fs.readFileSync(full), mime[path.extname(full)] || 'application/octet-stream');
 });
