@@ -7,9 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT || 3000);
 const sessions = new Map();
 const addresses = new Map();
-const voderQueue = [];
-const voderResults = new Map();
-const telegramKeyboard = { keyboard: [['Email'], ['Social Media Skills'], ['UI UX Pro Max'], ['بيانات السهم'], ['مشروع VODER'], ['تشغيل VODER'], ['حالة VODER'], ['أوامر VODER'], ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
+const telegramKeyboard = { keyboard: [['Email'], ['Social Media Skills'], ['UI UX Pro Max'], ['بيانات السهم'],    ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
 const emailKeyboard = { keyboard: [['New address', 'My addresses'], ['Send email', 'Home']], resize_keyboard: true, is_persistent: true };
 
 const bots = [
@@ -33,7 +31,6 @@ const projectInventory = [
   { name: 'video-use', status: 'browser-and-ffmpeg-required', railway: 'conditional' },
   { name: 'Agent-Reach', status: 'source-and-cli-dependencies-required', railway: 'conditional' },
   { name: 'free-claude-code', status: 'provider-credentials-required', railway: 'conditional' },
-  { name: 'VODER', status: 'GPU-required', railway: 'not-suitable-for-standard-railway' },
   { name: 'LocalSend', status: 'local-network-app', railway: 'not-suitable' }
 ];
 
@@ -65,21 +62,16 @@ async function handleTelegram(update) {
   const id = String(m.chat.id), text = String(m.text || '').trim(), s = userState(id), cmd = text.split(/\s+/)[0].toLowerCase();
   if (cmd === '/start' || text === 'Start') { s.stage = 'password'; return reply(id, 'اكتب كلمة المرور', { keyboard: [['Start']], resize_keyboard: true }); }
   if (!isLogged(id)) { if (s.stage === 'password' && process.env.BOT_LOGIN_PASSWORD && text === process.env.BOT_LOGIN_PASSWORD) { s.loggedIn = true; s.expires = Date.now() + 86400000; s.stage = null; return reply(id, 'تم تسجيل الدخول. اختر الخدمة.'); } return reply(id, process.env.BOT_LOGIN_PASSWORD ? 'اضغط Start ثم اكتب كلمة المرور' : 'BOT_LOGIN_PASSWORD غير مضبوط في Railway Variables.', { keyboard: [['Start']], resize_keyboard: true }); }
-  if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر الأصلية والجديدة:\nEmail — البريد\nSocial Media Skills — محتوى\nUI UX Pro Max — تصميم واجهة\nبيانات السهم — EGX\nمشروع VODER / تشغيل VODER / حالة VODER / أوامر VODER\n/projects /project <name> /bots /health');
+  if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر الأصلية والجديدة:\nEmail — البريد\nSocial Media Skills — محتوى\nUI UX Pro Max — تصميم واجهة\nبيانات السهم — EGX\n/projects /project <name> /bots /health');
   if (cmd === '/projects' || text === 'Railway Projects') return reply(id, railwayText());
   if (cmd === '/project') return reply(id, projectText(text.split(/\s+/).slice(1).join(' ')));
   if (cmd === '/bots') return reply(id, botsText());
-  if (cmd === '/health') return reply(id, `Email Bot Hub يعمل.\nRailway services: ${railwayServices.length}\nBots: ${bots.length}\nVODER queue: ${voderQueue.length}`);
   if (cmd === '/skills') return reply(id, 'Social Media Skills وUI UX Pro Max متاحان من القائمة.');
   if (text === 'Email') { s.stage = null; return reply(id, 'اختر خدمة البريد', emailKeyboard); }
   if (text === 'Social Media Skills') { s.stage = 'social'; return reply(id, 'اكتب طلب المحتوى: منشور، Hook، Content Matrix، سكربت Reels أو تعليق مثبت.'); }
   if (text === 'UI UX Pro Max') { s.stage = 'ux'; return reply(id, 'اكتب وصف الموقع أو الواجهة التي تريد تصميمها.'); }
   if (s.stage === 'social' || s.stage === 'ux') { const mode = s.stage === 'social' ? 'Social Media Skills' : 'UI UX Pro Max'; s.stage = null; return reply(id, await aiGenerate(mode, text)); }
   if (text === 'بيانات السهم') return reply(id, await stockText());
-  if (text === 'مشروع VODER') return reply(id, 'رابط VODER على GitHub:\nhttps://github.com/HAKORADev/VODER');
-  if (text === 'تشغيل VODER') return reply(id, 'شغّل جلسة Kaggle/Colab يدويًا ثم أرسل الملف هنا.');
-  if (text === 'حالة VODER') return reply(id, `VODER queue: ${voderQueue.length} ملف في الانتظار. التشغيل الكامل يحتاج GPU خارج خدمة Railway القياسية.`);
-  if (text === 'أوامر VODER') return reply(id, 'دليل VODER:\nhttps://github.com/HAKORADev/VODER/blob/main/docs/COMMAND_CATALOG.md');
   if (text === 'New address') { s.stage = 'new-address'; return reply(id, 'اكتب اسم العنوان مثل support', emailKeyboard); }
   if (text === 'My addresses') return reply(id, addresses.get(id)?.join(', ') || 'لا توجد عناوين', emailKeyboard);
   if (text === 'Send email') { s.stage = 'email-to'; return reply(id, 'اكتب بريد المستلم', emailKeyboard); }
@@ -87,7 +79,6 @@ async function handleTelegram(update) {
   if (s.stage === 'email-to') { s.to = text; s.stage = 'email-subject'; return reply(id, 'اكتب الموضوع', emailKeyboard); }
   if (s.stage === 'email-subject') { s.subject = text; s.stage = 'email-body'; return reply(id, 'اكتب الرسالة', emailKeyboard); }
   if (s.stage === 'email-body') { s.stage = null; return sendEmail(id, s.to, s.subject, text); }
-  if (m.document || m.audio || m.voice) { const f = m.document || m.audio || m.voice; voderQueue.push({ chat_id: id, file_id: f.file_id, file_name: f.file_name || 'input.bin', created_at: Date.now() }); return reply(id, 'تم استلام الملف ووضعه في VODER queue. شغّل جلسة GPU ثم أرسل النتيجة.'); }
   return reply(id, 'اختر من الأزرار أو أرسل /help.');
 }
 
@@ -99,9 +90,7 @@ const server = http.createServer(async (req, res) => {
   if (u.pathname === '/api/bots') return send(res, 200, JSON.stringify({ ok: true, bots }, null, 2));
   if (u.pathname === '/api/railway-services') return send(res, 200, JSON.stringify({ ok: true, services: railwayServices }, null, 2));
   if (u.pathname === '/api/projects') return send(res, 200, JSON.stringify({ ok: true, prepared: railwayServices, inventory: projectInventory }, null, 2));
-  if (u.pathname === '/api/bot-menu') return send(res, 200, JSON.stringify({ ok: true, original: ['Email', 'Social Media Skills', 'UI UX Pro Max', 'بيانات السهم', 'مشروع VODER', 'تشغيل VODER', 'حالة VODER', 'أوامر VODER'], new: ['Railway Projects', '/projects', '/project <name>', '/bots', '/health'], bots }, null, 2));
-  if (u.pathname === '/voder/next' && req.method === 'GET') { if (req.headers['x-voder-token'] !== process.env.VODER_BRIDGE_TOKEN) return send(res, 401, 'Unauthorized', 'text/plain'); return send(res, 200, JSON.stringify({ ok: true, item: voderQueue.shift() || null })); }
-  if (u.pathname === '/voder/result' && req.method === 'POST') { if (req.headers['x-voder-token'] !== process.env.VODER_BRIDGE_TOKEN) return send(res, 401, 'Unauthorized', 'text/plain'); const x = JSON.parse(await body(req)); voderResults.set(String(x.chat_id), x.text || 'تمت معالجة الملف بواسطة VODER'); await reply(String(x.chat_id), voderResults.get(String(x.chat_id))); return send(res, 200, JSON.stringify({ ok: true })); }
+  if (u.pathname === '/api/bot-menu') return send(res, 200, JSON.stringify({ ok: true, original: ['Email', 'Social Media Skills', 'UI UX Pro Max', 'بيانات السهم'], new: ['Railway Projects', '/projects', '/project <name>', '/bots', '/health'], bots }, null, 2));
   if (u.pathname.startsWith('/cf/')) { const name = u.pathname.split('/')[2]; const b = bots.find(x => x.name === name); if (!b) return send(res, 404, JSON.stringify({ ok: false, error: 'unknown bot' })); return proxy(req, res, `${b.url}/${u.pathname.split('/').slice(3).join('/')}${u.search}`); }
   const file = u.pathname === '/' ? '/index.html' : u.pathname; const full = path.resolve(root, 'site', file.slice(1)); if (!full.startsWith(path.resolve(root, 'site')) || !fs.existsSync(full)) return send(res, 404, 'Not Found', 'text/plain'); return send(res, 200, fs.readFileSync(full), mime[path.extname(full)] || 'application/octet-stream');
 });

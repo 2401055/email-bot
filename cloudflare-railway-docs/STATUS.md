@@ -7,7 +7,6 @@
 | Social Media Skills | integrated | documented | source is embedded in Worker |
 | UI UX Pro Max | integrated | documented | source is embedded in Worker |
 | ai-skills-bot-site | deployed | documented | original static source repository needed |
-| VODER bridge | prepared_not_running | package included | Kaggle/GPU and new bridge secret |
 | Cobalt | not completed | requirements documented | source and persistent runtime |
 | SearXNG | not completed | requirements documented | source/config and persistent storage |
 | Reactive Resume | not completed | requirements documented | source, database and storage |

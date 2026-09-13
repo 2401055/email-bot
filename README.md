@@ -37,7 +37,6 @@
 
 ## Full original bot + new Railway catalog
 
-The Railway implementation now keeps the original Email Bot flows and adds the Railway catalog in the same Telegram bot. Original flows include password login, Social Media Skills, UI UX Pro Max, email address management, Resend email sending, EGX stock lookup, and VODER queue/result endpoints. New flows include Railway Projects, project details, bot list, and health.
 
 Set these variables only in Railway Variables (never commit their values):
 
@@ -51,7 +50,5 @@ OPENAI_MODEL=gpt-4o-mini
 RESEND_API_KEY=...
 EMAIL_FROM=noreply@example.com
 EMAIL_DOMAIN=example.com
-VODER_BRIDGE_TOKEN=...
 ```
 
-The service exposes `POST /telegram/webhook`, `GET /health`, `GET /api/bot-menu`, `GET /api/projects`, and the VODER bridge endpoints `/voder/next` and `/voder/result`. Standard Railway service definitions remain under `railway-services/` and should be deployed as separate services in the same Railway project; the Telegram bot presents and manages their catalog from the central Email Bot.

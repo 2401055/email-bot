@@ -7,7 +7,6 @@ This repository is the single integration point for the Email Bot Hub, the AI Sk
 - `site/`: AI Skills site integrated into Email Bot Hub.
 - `src/`: Email Bot Hub server and Cloudflare fallback bridge.
 - `railway-services/`: Railway service roots for SearXNG, Reactive Resume, changedetection.io, Suwayomi, LibreTranslate, ArchiveBox, and Vaultwarden.
-- `voder/`: VODER Kaggle bridge package and deployment note. VODER full inference is not marked Railway-ready because it requires GPU/model resources.
 - `projects/`: all remaining projects from the Cloudflare inventory with an explicit readiness/blocker assessment.
 - `cloudflare-railway-docs/`: status and Railway translation guidance.
 
