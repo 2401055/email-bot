@@ -1,28 +1,31 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT || 3000);
+const sessions = new Map();
+const addresses = new Map();
+const voderQueue = [];
+const voderResults = new Map();
+const telegramKeyboard = { keyboard: [['Email'], ['Social Media Skills'], ['UI UX Pro Max'], ['بيانات السهم'], ['مشروع VODER'], ['تشغيل VODER'], ['حالة VODER'], ['أوامر VODER'], ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
+const emailKeyboard = { keyboard: [['New address', 'My addresses'], ['Send email', 'Home']], resize_keyboard: true, is_persistent: true };
 
 const bots = [
-  { name: 'email-bot', status: 'cloudflare-fallback', url: process.env.EMAIL_BOT_URL || 'https://email-bot.2401055.workers.dev' },
+  { name: 'email-bot', status: 'railway-primary', url: process.env.EMAIL_BOT_URL || 'https://email-bot.2401055.workers.dev' },
   { name: 'ai-skills-bot-site', status: 'integrated', url: process.env.AI_SKILLS_SITE_URL || 'https://ai-skills-bot-site.2401055.workers.dev' },
   { name: 'mytoolstown-automation', status: 'cloudflare-fallback', url: process.env.MYTOOLSTOWN_URL || 'https://mytoolstown-automation.2401055.workers.dev' }
 ];
-
 const railwayServices = [
-  { name: 'searxng', title: 'SearXNG', category: 'search', port: 8080, path: 'railway-services/searxng', status: 'ready-with-config', needs: ['Volumes /etc/searxng and /var/cache/searxng', 'optional Valkey'] },
-  { name: 'reactive-resume', title: 'Reactive Resume', category: 'productivity', port: 3000, path: 'railway-services/reactive-resume', status: 'ready-with-config', needs: ['PostgreSQL', 'APP_URL, DATABASE_URL, AUTH_SECRET', 'Volume /app/data if S3 is disabled'] },
-  { name: 'changedetection-io', title: 'changedetection.io', category: 'monitoring', port: 5000, path: 'railway-services/changedetection-io', status: 'ready-with-config', needs: ['Volume /datastore', 'optional browser service'] },
-  { name: 'suwayomi', title: 'Suwayomi', category: 'media', port: 4567, path: 'railway-services/suwayomi', status: 'ready-with-config', needs: ['persistent server/download storage'] },
-  { name: 'libretranslate', title: 'LibreTranslate', category: 'ai', port: 5000, path: 'railway-services/libretranslate', status: 'ready-with-config', needs: ['RAM and model storage', 'API rate limits'] },
-  { name: 'archivebox', title: 'ArchiveBox', category: 'archiving', port: 8000, path: 'railway-services/archivebox', status: 'ready-with-config', needs: ['Volume /data', 'tested image tag and backups'] },
-  { name: 'vaultwarden', title: 'Vaultwarden', category: 'security', port: 80, path: 'railway-services/vaultwarden', status: 'ready-with-config', needs: ['Volume /data', 'HTTPS, admin token, tested backups'] }
+  { name: 'searxng', title: 'SearXNG', category: 'search', port: 8080, path: 'railway-services/searxng', status: 'ready-with-config', needs: ['persistent volumes', 'optional Valkey'] },
+  { name: 'reactive-resume', title: 'Reactive Resume', category: 'productivity', port: 3000, path: 'railway-services/reactive-resume', status: 'ready-with-config', needs: ['PostgreSQL', 'APP_URL, DATABASE_URL, AUTH_SECRET'] },
+  { name: 'changedetection-io', title: 'changedetection.io', category: 'monitoring', port: 5000, path: 'railway-services/changedetection-io', status: 'ready-with-config', needs: ['datastore volume', 'optional browser service'] },
+  { name: 'suwayomi', title: 'Suwayomi', category: 'media', port: 4567, path: 'railway-services/suwayomi', status: 'ready-with-config', needs: ['persistent storage'] },
+  { name: 'libretranslate', title: 'LibreTranslate', category: 'ai', port: 5000, path: 'railway-services/libretranslate', status: 'ready-with-config', needs: ['RAM and model storage'] },
+  { name: 'archivebox', title: 'ArchiveBox', category: 'archiving', port: 8000, path: 'railway-services/archivebox', status: 'ready-with-config', needs: ['data volume', 'backups'] },
+  { name: 'vaultwarden', title: 'Vaultwarden', category: 'security', port: 80, path: 'railway-services/vaultwarden', status: 'ready-with-config', needs: ['data volume', 'HTTPS and backups'] }
 ];
-
 const projectInventory = [
   { name: 'Cobalt', status: 'source-required', railway: 'candidate' },
   { name: 'gallery-dl', status: 'source-required', railway: 'worker-or-cron' },
@@ -30,60 +33,76 @@ const projectInventory = [
   { name: 'video-use', status: 'browser-and-ffmpeg-required', railway: 'conditional' },
   { name: 'Agent-Reach', status: 'source-and-cli-dependencies-required', railway: 'conditional' },
   { name: 'free-claude-code', status: 'provider-credentials-required', railway: 'conditional' },
-  { name: 'LocalSend', status: 'excluded-local-network', railway: 'not-suitable' },
   { name: 'VODER', status: 'GPU-required', railway: 'not-suitable-for-standard-railway' },
-  { name: 'Google Cloud deployment', status: 'deployment-target-not-app', railway: 'not-a-service' },
-  { name: 'Oracle Cloud', status: 'deployment-target-not-app', railway: 'not-a-service' }
+  { name: 'LocalSend', status: 'local-network-app', railway: 'not-suitable' }
 ];
 
-const botMenu = {
-  title: 'Email Bot Hub',
-  groups: [
-    { name: 'AI Skills', items: [{ command: 'Social Media Skills', action: 'ai-skills' }, { command: 'UI UX Pro Max', action: 'ui-ux' }] },
-    { name: 'Railway projects', items: railwayServices.map(s => ({ command: s.title, action: 'railway-project', project: s.name, status: s.status })) },
-    { name: 'Cloudflare bots', items: bots.map(b => ({ command: b.name, action: 'cloudflare-bot', url: b.url, status: b.status })) }
-  ]
-};
-
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
-const telegramKeyboard = { keyboard: [[{ text: 'Railway Projects' }, { text: 'Cloudflare Bots' }], [{ text: 'AI Skills' }, { text: 'Health' }], [{ text: 'Help' }]], resize_keyboard: true, is_persistent: true };
-function telegramText() { return ['Email Bot Hub', '', 'البوت يجمع خدمات Railway المجهزة، AI Skills، والبوتات المتبقية.', '', 'الأوامر:', '/projects — خدمات Railway وبقية المشاريع', '/project <name> — تفاصيل مشروع', '/bots — البوتات المرتبطة', '/skills — AI Skills', '/health — حالة البوت', '/help — المساعدة'].join('\n'); }
-function railwayText() { return ['خدمات Railway المجهزة:', ...railwayServices.map((x, i) => `${i + 1}. ${x.title} — ${x.status}`), '', 'استخدم /project <name> للتفاصيل.'].join('\n'); }
-function botsText() { return ['البوتات الموجودة داخل Email Bot:', ...bots.map((x, i) => `${i + 1}. ${x.name} — ${x.status}`)].join('\n'); }
-function projectDetails(name) { const x = railwayServices.find(item => item.name.toLowerCase() === String(name || '').toLowerCase() || item.title.toLowerCase() === String(name || '').toLowerCase()); if (!x) return 'المشروع غير موجود. استخدم /projects لعرض القائمة.'; return [`${x.title}`, `الحالة: ${x.status}`, `التصنيف: ${x.category}`, `المنفذ: ${x.port}`, `المسار: ${x.path}`, `المتطلبات: ${x.needs.join('؛ ')}`].join('\n'); }
-async function telegramSend(chatId, text) { const token = process.env.TELEGRAM_BOT_TOKEN; if (!token) return false; const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text, reply_markup: telegramKeyboard, disable_web_page_preview: true }) }); return r.ok; }
-async function telegramHandle(update) { const msg = update?.message; if (!msg?.chat?.id) return; const text = String(msg.text || '').trim(); const command = text.split(/\s+/)[0].toLowerCase(); let reply; if (command === '/start' || command === '/help' || text === 'Help') reply = telegramText(); else if (command === '/projects' || text === 'Railway Projects') reply = railwayText(); else if (command === '/bots' || text === 'Cloudflare Bots') reply = botsText(); else if (command === '/skills' || text === 'AI Skills') reply = 'AI Skills داخل Email Bot:\n\nSocial Media Skills — اكتب طلب محتوى أو Hook أو خطة نشر.\nUI UX Pro Max — اكتب وصف الواجهة أو الموقع المطلوب.'; else if (command === '/health' || text === 'Health') reply = 'Email Bot Hub يعمل.\nRailway catalog: ' + railwayServices.length + ' services\nBots: ' + bots.length; else if (command === '/project') reply = projectDetails(text.split(/\s+/).slice(1).join(' ')); else reply = 'استخدم /help لعرض القائمة والأوامر.'; await telegramSend(msg.chat.id, reply); }
-async function readRequestBody(req) { const chunks = []; for await (const chunk of req) chunks.push(chunk); return Buffer.concat(chunks).toString('utf8'); }
 function send(res, status, body, type = 'application/json') { res.writeHead(status, { 'content-type': type }); res.end(body); }
-async function proxy(req, res, target) {
-  try {
-    const u = new URL(target);
-    const upstream = await fetch(u, { method: req.method, headers: { 'content-type': req.headers['content-type'] || '' }, body: ['GET', 'HEAD'].includes(req.method) ? undefined : req });
-    send(res, upstream.status, await upstream.text(), upstream.headers.get('content-type') || 'text/plain');
-  } catch { send(res, 502, JSON.stringify({ ok: false, error: 'upstream unavailable' })); }
+async function body(req) { const chunks = []; for await (const c of req) chunks.push(c); return Buffer.concat(chunks).toString('utf8'); }
+function userState(id) { if (!sessions.has(String(id))) sessions.set(String(id), { loggedIn: false, stage: null, expires: 0 }); return sessions.get(String(id)); }
+function isLogged(id) { const s = userState(id); return s.loggedIn && s.expires > Date.now(); }
+function menuFor(id) { return isLogged(id) ? telegramKeyboard : { keyboard: [['Start']], resize_keyboard: true }; }
+async function tg(method, payload) { const token = process.env.TELEGRAM_BOT_TOKEN; if (!token) return false; const r = await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }); return r.ok; }
+async function reply(id, text, keyboard = menuFor(id)) { return tg('sendMessage', { chat_id: id, text, reply_markup: keyboard, disable_web_page_preview: true }); }
+function railwayText() { return ['خدمات Railway المجهزة:', ...railwayServices.map((x, i) => `${i + 1}. ${x.title} — ${x.status}`), '', 'للتفاصيل: /project <name>'].join('\n'); }
+function projectText(name) { const x = railwayServices.find(p => p.name.toLowerCase() === String(name || '').toLowerCase() || p.title.toLowerCase() === String(name || '').toLowerCase()); return x ? [`${x.title}`, `الحالة: ${x.status}`, `التصنيف: ${x.category}`, `المنفذ: ${x.port}`, `المسار: ${x.path}`, `المتطلبات: ${x.needs.join('؛ ')}`].join('\n') : 'المشروع غير موجود. استخدم /projects.'; }
+function botsText() { return ['البوتات الموجودة داخل Email Bot:', ...bots.map(x => `${x.name} — ${x.status}`)].join('\n'); }
+async function aiGenerate(mode, prompt) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) return `تم استلام طلب ${mode}، لكن مفتاح مزود الذكاء الاصطناعي غير مضبوط في Railway Variables.`;
+  const base = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
+  const r = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-4o-mini', messages: [{ role: 'system', content: `You are ${mode} inside a Telegram bot. Answer Arabic, practical, and safe. Do not publish or request credentials.` }, { role: 'user', content: prompt }] }) });
+  if (!r.ok) return 'تعذر تشغيل مزود الذكاء الاصطناعي حاليًا.';
+  const x = await r.json(); return x.choices?.[0]?.message?.content || 'لم تصل نتيجة.';
+}
+async function stockText() {
+  try { const r = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/COMI.CA?interval=1d&range=1d', { headers: { 'User-Agent': 'EmailBot/1.0' } }); const x = await r.json(); const m = x.chart.result[0].meta; return `بيانات COMI (EGX)\nالسعر: ${m.regularMarketPrice ?? '-'}\nالتغير: ${m.regularMarketChangePercent ?? '-'}%`; } catch { return 'تعذر قراءة بيانات السهم حاليًا.'; }
+}
+async function sendEmail(id, to, subject, text) { if (!process.env.RESEND_API_KEY) return reply(id, 'تم تجهيز الرسالة، لكن RESEND_API_KEY غير مضبوط في Railway Variables.', emailKeyboard); const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@joserv.dpdns.org', to: [to], subject, text }) }); return reply(id, r.ok ? 'تم إرسال الرسالة عبر Resend.' : 'فشل إرسال الرسالة.', emailKeyboard); }
+async function handleTelegram(update) {
+  const m = update?.message; if (!m?.chat?.id) return;
+  const id = String(m.chat.id), text = String(m.text || '').trim(), s = userState(id), cmd = text.split(/\s+/)[0].toLowerCase();
+  if (cmd === '/start' || text === 'Start') { s.stage = 'password'; return reply(id, 'اكتب كلمة المرور', { keyboard: [['Start']], resize_keyboard: true }); }
+  if (!isLogged(id)) { if (s.stage === 'password' && process.env.BOT_LOGIN_PASSWORD && text === process.env.BOT_LOGIN_PASSWORD) { s.loggedIn = true; s.expires = Date.now() + 86400000; s.stage = null; return reply(id, 'تم تسجيل الدخول. اختر الخدمة.'); } return reply(id, process.env.BOT_LOGIN_PASSWORD ? 'اضغط Start ثم اكتب كلمة المرور' : 'BOT_LOGIN_PASSWORD غير مضبوط في Railway Variables.', { keyboard: [['Start']], resize_keyboard: true }); }
+  if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر الأصلية والجديدة:\nEmail — البريد\nSocial Media Skills — محتوى\nUI UX Pro Max — تصميم واجهة\nبيانات السهم — EGX\nمشروع VODER / تشغيل VODER / حالة VODER / أوامر VODER\n/projects /project <name> /bots /health');
+  if (cmd === '/projects' || text === 'Railway Projects') return reply(id, railwayText());
+  if (cmd === '/project') return reply(id, projectText(text.split(/\s+/).slice(1).join(' ')));
+  if (cmd === '/bots') return reply(id, botsText());
+  if (cmd === '/health') return reply(id, `Email Bot Hub يعمل.\nRailway services: ${railwayServices.length}\nBots: ${bots.length}\nVODER queue: ${voderQueue.length}`);
+  if (cmd === '/skills') return reply(id, 'Social Media Skills وUI UX Pro Max متاحان من القائمة.');
+  if (text === 'Email') { s.stage = null; return reply(id, 'اختر خدمة البريد', emailKeyboard); }
+  if (text === 'Social Media Skills') { s.stage = 'social'; return reply(id, 'اكتب طلب المحتوى: منشور، Hook، Content Matrix، سكربت Reels أو تعليق مثبت.'); }
+  if (text === 'UI UX Pro Max') { s.stage = 'ux'; return reply(id, 'اكتب وصف الموقع أو الواجهة التي تريد تصميمها.'); }
+  if (s.stage === 'social' || s.stage === 'ux') { const mode = s.stage === 'social' ? 'Social Media Skills' : 'UI UX Pro Max'; s.stage = null; return reply(id, await aiGenerate(mode, text)); }
+  if (text === 'بيانات السهم') return reply(id, await stockText());
+  if (text === 'مشروع VODER') return reply(id, 'رابط VODER على GitHub:\nhttps://github.com/HAKORADev/VODER');
+  if (text === 'تشغيل VODER') return reply(id, 'شغّل جلسة Kaggle/Colab يدويًا ثم أرسل الملف هنا.');
+  if (text === 'حالة VODER') return reply(id, `VODER queue: ${voderQueue.length} ملف في الانتظار. التشغيل الكامل يحتاج GPU خارج خدمة Railway القياسية.`);
+  if (text === 'أوامر VODER') return reply(id, 'دليل VODER:\nhttps://github.com/HAKORADev/VODER/blob/main/docs/COMMAND_CATALOG.md');
+  if (text === 'New address') { s.stage = 'new-address'; return reply(id, 'اكتب اسم العنوان مثل support', emailKeyboard); }
+  if (text === 'My addresses') return reply(id, addresses.get(id)?.join(', ') || 'لا توجد عناوين', emailKeyboard);
+  if (text === 'Send email') { s.stage = 'email-to'; return reply(id, 'اكتب بريد المستلم', emailKeyboard); }
+  if (s.stage === 'new-address') { const a = text.toLowerCase(); if (!/^[a-z0-9_-]{1,49}$/.test(a)) return reply(id, 'اسم غير صالح', emailKeyboard); const list = addresses.get(id) || []; if (!list.includes(a)) list.push(a); addresses.set(id, list); s.stage = null; return reply(id, `تم إنشاء ${a}@${process.env.EMAIL_DOMAIN || 'joserv.dpdns.org'}`, emailKeyboard); }
+  if (s.stage === 'email-to') { s.to = text; s.stage = 'email-subject'; return reply(id, 'اكتب الموضوع', emailKeyboard); }
+  if (s.stage === 'email-subject') { s.subject = text; s.stage = 'email-body'; return reply(id, 'اكتب الرسالة', emailKeyboard); }
+  if (s.stage === 'email-body') { s.stage = null; return sendEmail(id, s.to, s.subject, text); }
+  if (m.document || m.audio || m.voice) { const f = m.document || m.audio || m.voice; voderQueue.push({ chat_id: id, file_id: f.file_id, file_name: f.file_name || 'input.bin', created_at: Date.now() }); return reply(id, 'تم استلام الملف ووضعه في VODER queue. شغّل جلسة GPU ثم أرسل النتيجة.'); }
+  return reply(id, 'اختر من الأزرار أو أرسل /help.');
 }
 
+async function proxy(req, res, target) { try { const r = await fetch(target, { method: req.method, headers: { 'content-type': req.headers['content-type'] || '' }, body: ['GET', 'HEAD'].includes(req.method) ? undefined : req }); send(res, r.status, await r.text(), r.headers.get('content-type') || 'text/plain'); } catch { send(res, 502, JSON.stringify({ ok: false, error: 'upstream unavailable' })); } }
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, `http://${req.headers.host}`);
-  if (u.pathname === '/health') return send(res, 200, JSON.stringify({ ok: true, service: 'email-bot-hub', mode: 'railway-integrated-catalog', telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN) }));
-  if (u.pathname === '/telegram/webhook' && req.method === 'POST') {
-    if (process.env.TELEGRAM_WEBHOOK_SECRET && req.headers['x-telegram-bot-api-secret-token'] !== process.env.TELEGRAM_WEBHOOK_SECRET) return send(res, 401, JSON.stringify({ ok: false, error: 'unauthorized' }));
-    try { await telegramHandle(JSON.parse(await readRequestBody(req))); return send(res, 200, JSON.stringify({ ok: true })); } catch { return send(res, 400, JSON.stringify({ ok: false, error: 'bad update' })); }
-  }
+  if (u.pathname === '/health') return send(res, 200, JSON.stringify({ ok: true, service: 'email-bot-hub', mode: 'full-original-plus-railway', telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN), services: railwayServices.length }));
+  if (u.pathname === '/telegram/webhook' && req.method === 'POST') { if (process.env.TELEGRAM_WEBHOOK_SECRET && req.headers['x-telegram-bot-api-secret-token'] !== process.env.TELEGRAM_WEBHOOK_SECRET) return send(res, 401, JSON.stringify({ ok: false, error: 'unauthorized' })); try { await handleTelegram(JSON.parse(await body(req))); return send(res, 200, JSON.stringify({ ok: true })); } catch { return send(res, 400, JSON.stringify({ ok: false, error: 'bad update' })); } }
   if (u.pathname === '/api/bots') return send(res, 200, JSON.stringify({ ok: true, bots }, null, 2));
   if (u.pathname === '/api/railway-services') return send(res, 200, JSON.stringify({ ok: true, services: railwayServices }, null, 2));
   if (u.pathname === '/api/projects') return send(res, 200, JSON.stringify({ ok: true, prepared: railwayServices, inventory: projectInventory }, null, 2));
-  if (u.pathname === '/api/bot-menu') return send(res, 200, JSON.stringify({ ok: true, menu: botMenu }, null, 2));
-  if (u.pathname.startsWith('/cf/')) {
-    const name = u.pathname.split('/')[2];
-    const bot = bots.find(x => x.name === name);
-    if (!bot) return send(res, 404, JSON.stringify({ ok: false, error: 'unknown bot' }));
-    const suffix = u.pathname.split('/').slice(3).join('/');
-    return proxy(req, res, `${bot.url}${suffix ? `/${suffix}` : ''}${u.search}`);
-  }
-  const file = u.pathname === '/' ? '/index.html' : u.pathname;
-  const full = path.resolve(root, 'site', file.slice(1));
-  if (!full.startsWith(path.resolve(root, 'site')) || !fs.existsSync(full)) return send(res, 404, 'Not Found', 'text/plain');
-  send(res, 200, fs.readFileSync(full), mime[path.extname(full)] || 'application/octet-stream');
+  if (u.pathname === '/api/bot-menu') return send(res, 200, JSON.stringify({ ok: true, original: ['Email', 'Social Media Skills', 'UI UX Pro Max', 'بيانات السهم', 'مشروع VODER', 'تشغيل VODER', 'حالة VODER', 'أوامر VODER'], new: ['Railway Projects', '/projects', '/project <name>', '/bots', '/health'], bots }, null, 2));
+  if (u.pathname === '/voder/next' && req.method === 'GET') { if (req.headers['x-voder-token'] !== process.env.VODER_BRIDGE_TOKEN) return send(res, 401, 'Unauthorized', 'text/plain'); return send(res, 200, JSON.stringify({ ok: true, item: voderQueue.shift() || null })); }
+  if (u.pathname === '/voder/result' && req.method === 'POST') { if (req.headers['x-voder-token'] !== process.env.VODER_BRIDGE_TOKEN) return send(res, 401, 'Unauthorized', 'text/plain'); const x = JSON.parse(await body(req)); voderResults.set(String(x.chat_id), x.text || 'تمت معالجة الملف بواسطة VODER'); await reply(String(x.chat_id), voderResults.get(String(x.chat_id))); return send(res, 200, JSON.stringify({ ok: true })); }
+  if (u.pathname.startsWith('/cf/')) { const name = u.pathname.split('/')[2]; const b = bots.find(x => x.name === name); if (!b) return send(res, 404, JSON.stringify({ ok: false, error: 'unknown bot' })); return proxy(req, res, `${b.url}/${u.pathname.split('/').slice(3).join('/')}${u.search}`); }
+  const file = u.pathname === '/' ? '/index.html' : u.pathname; const full = path.resolve(root, 'site', file.slice(1)); if (!full.startsWith(path.resolve(root, 'site')) || !fs.existsSync(full)) return send(res, 404, 'Not Found', 'text/plain'); return send(res, 200, fs.readFileSync(full), mime[path.extname(full)] || 'application/octet-stream');
 });
 server.listen(port, '0.0.0.0', () => console.log(`email-bot-hub listening on ${port}`));

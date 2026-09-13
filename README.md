@@ -33,3 +33,25 @@
 ## Cloudflare وTelegram
 
 الوضع الحالي Hybrid آمن: Workers الأصلية تظل Backend احتياطيًا حتى يتم نقل كل بوت واختباره على حدة. لا يتم نسخ Telegram tokens أو Resend keys أو KV/D1/Workers AI secrets إلى GitHub. يتم وضعها في Railway Variables أو الخدمات البديلة فقط بعد اختبار كل عملية نقل.
+
+
+## Full original bot + new Railway catalog
+
+The Railway implementation now keeps the original Email Bot flows and adds the Railway catalog in the same Telegram bot. Original flows include password login, Social Media Skills, UI UX Pro Max, email address management, Resend email sending, EGX stock lookup, and VODER queue/result endpoints. New flows include Railway Projects, project details, bot list, and health.
+
+Set these variables only in Railway Variables (never commit their values):
+
+```text
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_WEBHOOK_SECRET=...
+BOT_LOGIN_PASSWORD=...
+OPENAI_API_KEY=...
+OPENAI_API_BASE=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
+RESEND_API_KEY=...
+EMAIL_FROM=noreply@example.com
+EMAIL_DOMAIN=example.com
+VODER_BRIDGE_TOKEN=...
+```
+
+The service exposes `POST /telegram/webhook`, `GET /health`, `GET /api/bot-menu`, `GET /api/projects`, and the VODER bridge endpoints `/voder/next` and `/voder/result`. Standard Railway service definitions remain under `railway-services/` and should be deployed as separate services in the same Railway project; the Telegram bot presents and manages their catalog from the central Email Bot.
