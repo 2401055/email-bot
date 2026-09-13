@@ -68,3 +68,24 @@ railway config apply
 ```
 
 `config plan` previews the resources; `config apply` creates the services and resources after confirmation. A GitHub Repo selection alone deploys one service and does not create the complete dependency graph; the IaC apply is the supported one-project automation step. Secrets such as Telegram, Resend, and AI keys remain Railway Variables and are intentionally not stored in GitHub.
+
+
+## تشغيل الخدمات من GitHub بدون Railway CLI
+
+يمكن تشغيل IaC من GitHub Actions بعد إضافة Secret واحد إلى المستودع:
+
+```text
+Settings → Secrets and variables → Actions → New repository secret
+Name: RAILWAY_TOKEN
+Value: Railway Project Token
+```
+
+بعد ذلك:
+
+1. أنشئ Railway Project واختر Repo `2401055/email-bot` مرة واحدة.
+2. أضف Secret `RAILWAY_TOKEN` في GitHub.
+3. افتح تبويب **Actions** في GitHub.
+4. اختر **Railway infrastructure**.
+5. اضغط **Run workflow**.
+
+الـWorkflow سيشغّل Railway IaC وينشئ الخدمات، PostgreSQL، Redis/Valkey، والـVolumes من الملف `.railway/railway.ts`. لا تحتاج إلى تثبيت Railway CLI أو تنفيذ أوامر في الطرفية. لا تضع Telegram أو Resend أو OpenAI secrets في GitHub؛ أضفها لاحقًا داخل Railway Variables.
