@@ -46,6 +46,14 @@ const botMenu = {
 };
 
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const telegramKeyboard = { keyboard: [[{ text: 'Railway Projects' }, { text: 'Cloudflare Bots' }], [{ text: 'AI Skills' }, { text: 'Health' }], [{ text: 'Help' }]], resize_keyboard: true, is_persistent: true };
+function telegramText() { return ['Email Bot Hub', '', 'البوت يجمع خدمات Railway المجهزة، AI Skills، والبوتات المتبقية.', '', 'الأوامر:', '/projects — خدمات Railway وبقية المشاريع', '/project <name> — تفاصيل مشروع', '/bots — البوتات المرتبطة', '/skills — AI Skills', '/health — حالة البوت', '/help — المساعدة'].join('\n'); }
+function railwayText() { return ['خدمات Railway المجهزة:', ...railwayServices.map((x, i) => `${i + 1}. ${x.title} — ${x.status}`), '', 'استخدم /project <name> للتفاصيل.'].join('\n'); }
+function botsText() { return ['البوتات الموجودة داخل Email Bot:', ...bots.map((x, i) => `${i + 1}. ${x.name} — ${x.status}`)].join('\n'); }
+function projectDetails(name) { const x = railwayServices.find(item => item.name.toLowerCase() === String(name || '').toLowerCase() || item.title.toLowerCase() === String(name || '').toLowerCase()); if (!x) return 'المشروع غير موجود. استخدم /projects لعرض القائمة.'; return [`${x.title}`, `الحالة: ${x.status}`, `التصنيف: ${x.category}`, `المنفذ: ${x.port}`, `المسار: ${x.path}`, `المتطلبات: ${x.needs.join('؛ ')}`].join('\n'); }
+async function telegramSend(chatId, text) { const token = process.env.TELEGRAM_BOT_TOKEN; if (!token) return false; const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text, reply_markup: telegramKeyboard, disable_web_page_preview: true }) }); return r.ok; }
+async function telegramHandle(update) { const msg = update?.message; if (!msg?.chat?.id) return; const text = String(msg.text || '').trim(); const command = text.split(/\s+/)[0].toLowerCase(); let reply; if (command === '/start' || command === '/help' || text === 'Help') reply = telegramText(); else if (command === '/projects' || text === 'Railway Projects') reply = railwayText(); else if (command === '/bots' || text === 'Cloudflare Bots') reply = botsText(); else if (command === '/skills' || text === 'AI Skills') reply = 'AI Skills داخل Email Bot:\n\nSocial Media Skills — اكتب طلب محتوى أو Hook أو خطة نشر.\nUI UX Pro Max — اكتب وصف الواجهة أو الموقع المطلوب.'; else if (command === '/health' || text === 'Health') reply = 'Email Bot Hub يعمل.\nRailway catalog: ' + railwayServices.length + ' services\nBots: ' + bots.length; else if (command === '/project') reply = projectDetails(text.split(/\s+/).slice(1).join(' ')); else reply = 'استخدم /help لعرض القائمة والأوامر.'; await telegramSend(msg.chat.id, reply); }
+async function readRequestBody(req) { const chunks = []; for await (const chunk of req) chunks.push(chunk); return Buffer.concat(chunks).toString('utf8'); }
 function send(res, status, body, type = 'application/json') { res.writeHead(status, { 'content-type': type }); res.end(body); }
 async function proxy(req, res, target) {
   try {
@@ -57,7 +65,11 @@ async function proxy(req, res, target) {
 
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, `http://${req.headers.host}`);
-  if (u.pathname === '/health') return send(res, 200, JSON.stringify({ ok: true, service: 'email-bot-hub', mode: 'railway-integrated-catalog' }));
+  if (u.pathname === '/health') return send(res, 200, JSON.stringify({ ok: true, service: 'email-bot-hub', mode: 'railway-integrated-catalog', telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN) }));
+  if (u.pathname === '/telegram/webhook' && req.method === 'POST') {
+    if (process.env.TELEGRAM_WEBHOOK_SECRET && req.headers['x-telegram-bot-api-secret-token'] !== process.env.TELEGRAM_WEBHOOK_SECRET) return send(res, 401, JSON.stringify({ ok: false, error: 'unauthorized' }));
+    try { await telegramHandle(JSON.parse(await readRequestBody(req))); return send(res, 200, JSON.stringify({ ok: true })); } catch { return send(res, 400, JSON.stringify({ ok: false, error: 'bad update' })); }
+  }
   if (u.pathname === '/api/bots') return send(res, 200, JSON.stringify({ ok: true, bots }, null, 2));
   if (u.pathname === '/api/railway-services') return send(res, 200, JSON.stringify({ ok: true, services: railwayServices }, null, 2));
   if (u.pathname === '/api/projects') return send(res, 200, JSON.stringify({ ok: true, prepared: railwayServices, inventory: projectInventory }, null, 2));
