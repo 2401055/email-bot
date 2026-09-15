@@ -1,0 +1,125 @@
+services:
+  searxng:
+    build:
+      context: ./railway-services/searxng
+    image: email-bot/searxng:local
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - searxng-config:/etc/searxng
+      - searxng-cache:/var/cache/searxng
+    environment:
+      - BASE_URL=http://localhost:8080/
+      - INSTANCE_NAME=Email Bot SearXNG
+    depends_on:
+      - valkey
+
+  reactive-resume:
+    build:
+      context: ./railway-services/reactive-resume
+    image: email-bot/reactive-resume:local
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - APP_URL=http://localhost:3000
+      - DATABASE_URL=postgresql://reactive_resume:reactive_resume@postgres:5432/reactive_resume
+      - AUTH_SECRET=${REACTIVE_RESUME_AUTH_SECRET:-change-this-for-local-testing}
+    volumes:
+      - reactive-resume-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  changedetection:
+    build:
+      context: ./railway-services/changedetection-io
+    image: email-bot/changedetection:local
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - PLAYWRIGHT_DRIVER_URL=${PLAYWRIGHT_DRIVER_URL:-}
+    volumes:
+      - changedetection-data:/datastore
+
+  suwayomi:
+    build:
+      context: ./railway-services/suwayomi
+    image: email-bot/suwayomi:local
+    restart: unless-stopped
+    ports:
+      - "4567:4567"
+    volumes:
+      - suwayomi-data:/home/suwayomi/.local/share/Tachidesk
+
+  libretranslate:
+    build:
+      context: ./railway-services/libretranslate
+    image: email-bot/libretranslate:local
+    restart: unless-stopped
+    ports:
+      - "5001:5000"
+    environment:
+      - LT_LOAD_ONLY=${LT_LOAD_ONLY:-en,ar}
+      - LT_UPDATE_MODELS=${LT_UPDATE_MODELS:-true}
+
+  archivebox:
+    build:
+      context: ./railway-services/archivebox
+    image: email-bot/archivebox:local
+    restart: unless-stopped
+    command: server --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - archivebox-data:/data
+
+  vaultwarden:
+    build:
+      context: ./railway-services/vaultwarden
+    image: email-bot/vaultwarden:local
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      - DOMAIN=${VAULTWARDEN_DOMAIN:-http://localhost:8081}
+      - SIGNUPS_ALLOWED=${VAULTWARDEN_SIGNUPS_ALLOWED:-true}
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN:-}
+    volumes:
+      - vaultwarden-data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=reactive_resume
+      - POSTGRES_PASSWORD=reactive_resume
+      - POSTGRES_DB=reactive_resume
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reactive_resume -d reactive_resume"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    command: valkey-server --save 60 1 --loglevel warning
+    volumes:
+      - valkey-data:/data
+
+volumes:
+  searxng-config:
+  searxng-cache:
+  reactive-resume-data:
+  changedetection-data:
+  suwayomi-data:
+  archivebox-data:
+  vaultwarden-data:
+  postgres-data:
+  valkey-data:
