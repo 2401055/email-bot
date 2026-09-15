@@ -7,7 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT || 3000);
 const sessions = new Map();
 const addresses = new Map();
-const telegramKeyboard = { keyboard: [['Email'], ['بيانات السهم'], ['Codeforces'], ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
+const telegramKeyboard = { keyboard: [['Email'], ['بيانات السهم'], ['Codeforces'], ['تشغيل الخدمات', 'حالة الخدمات'], ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
 const emailKeyboard = { keyboard: [['New address', 'My addresses'], ['Send email', 'Home']], resize_keyboard: true, is_persistent: true };
 
 const bots = [
@@ -74,7 +74,7 @@ async function startServicesText() {
   return r.ok ? 'بدأ تشغيل الخدمات على GitHub Actions. استخدم /services_status بعد دقيقة لمتابعة الحالة.\nمهم: التشغيل مؤقت وسيُغلق بعد انتهاء الاختبار.' : `تعذر بدء الخدمات: ${r.error}`;
 }
 async function servicesStatusText() {
-  const r = await githubRequest(`/repos/${githubRepo()}/actions/runs?branch=main&per_page=1`);
+  const r = await githubRequest(`/repos/${githubRepo()}/actions/workflows/compose-test.yml/runs?branch=main&per_page=1`);
   if (!r.ok) return `تعذر قراءة الحالة: ${r.error}`;
   const run = r.data.workflow_runs?.[0];
   if (!run) return 'لا يوجد تشغيل للخدمات حتى الآن.';
@@ -92,8 +92,8 @@ async function handleTelegram(update) {
   if (cmd === '/project') return reply(id, await projectText(text.split(/\s+/).slice(1).join(' ')));
   if (cmd === '/bots') return reply(id, botsText());
   if (cmd === '/codeforces' || cmd === '/cf') return reply(id, await codeforcesText(text.split(/\s+/).slice(1).join(' ')));
-  if (cmd === '/services_start') return reply(id, await startServicesText());
-  if (cmd === '/services_status') return reply(id, await servicesStatusText());
+  if (cmd === '/services_start' || text === 'تشغيل الخدمات') return reply(id, await startServicesText());
+  if (cmd === '/services_status' || text === 'حالة الخدمات') return reply(id, await servicesStatusText());
   if (text === 'Codeforces') { s.stage = 'codeforces-handle'; return reply(id, 'اكتب اسم مستخدم Codeforces، مثل tourist.'); }
   if (text === 'Email') { s.stage = null; return reply(id, 'اختر خدمة البريد', emailKeyboard); }
   if (text === 'بيانات السهم') return reply(id, await stockText());
