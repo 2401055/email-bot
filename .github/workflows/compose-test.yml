@@ -66,6 +66,11 @@ jobs:
             if [ "$code" = "000" ]; then echo 'unreachable after 180s'; fi
           done
 
+      - name: Keep temporary services running
+        run: |
+          echo 'Services are running temporarily for 15 minutes.'
+          sleep 900
+
       - name: Show logs for failed services
         if: always()
         run: docker compose logs --tail=120
