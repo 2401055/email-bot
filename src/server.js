@@ -8,7 +8,7 @@ const port = Number(process.env.PORT || 3000);
 const sessions = new Map();
 const addresses = new Map();
 let temporaryServiceLinks = {};
-const telegramKeyboard = { keyboard: [['Email'], ['بيانات السهم'], ['تشغيل الخدمات', 'حالة الخدمات'], ['روابط الخدمات'], ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
+const telegramKeyboard = { keyboard: [['Email'], ['بحث', 'ترجمة'], ['مراقبة موقع', 'حفظ صفحة'], ['فتح التطبيقات'], ['تشغيل الخدمات', 'حالة الخدمات'], ['روابط الخدمات'], ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
 const emailKeyboard = { keyboard: [['New address', 'My addresses'], ['Send email', 'Home']], resize_keyboard: true, is_persistent: true };
 
 const bots = [
@@ -73,20 +73,34 @@ async function servicesStatusText() {
 }
 function serviceLinkRows() { return Object.entries(temporaryServiceLinks).filter(([, url]) => /^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/?$/i.test(url)); }
 async function serviceLinksReply(id) { const rows = serviceLinkRows(); if (!rows.length) return reply(id, 'لا توجد روابط خدمات الآن. اضغط «تشغيل الخدمات» وانتظر حوالي دقيقة.'); return tg('sendMessage', { chat_id: id, text: 'افتح الخدمة المطلوبة:', reply_markup: { inline_keyboard: rows.map(([name, url]) => [{ text: name, url }]) }, disable_web_page_preview: true }); }
+function serviceBase(name) { return String(temporaryServiceLinks[name] || '').replace(/\/$/, ''); }
+async function searxSearch(query) { const base = serviceBase('searxng'); if (!base) return 'شغّل الخدمات أولًا للحصول على رابط SearXNG.'; try { const r = await fetch(`${base}/search?q=${encodeURIComponent(query)}&format=json`, { signal: AbortSignal.timeout(15000) }); const data = await r.json(); const rows = (data.results || []).slice(0, 5).map((x, i) => `${i + 1}. ${x.title}\n${x.url}`); return rows.length ? ['نتائج البحث:', ...rows].join('\n') : 'لم توجد نتائج.'; } catch { return 'تعذر تنفيذ البحث الآن.'; } }
+async function translateText(text) { const base = serviceBase('libretranslate'); if (!base) return 'شغّل الخدمات أولًا للحصول على رابط LibreTranslate.'; try { const r = await fetch(`${base}/translate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text, source: 'auto', target: 'en', format: 'text' }), signal: AbortSignal.timeout(20000) }); const data = await r.json(); return data.translatedText ? `الترجمة إلى الإنجليزية:\n${data.translatedText}` : 'تعذرت الترجمة.'; } catch { return 'تعذر الاتصال بخدمة الترجمة الآن.'; } }
+async function serviceAction(name, path, payload) { const base = serviceBase(name); if (!base) return 'شغّل الخدمات أولًا للحصول على الرابط المؤقت.'; try { const r = await fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(15000) }); return r.ok ? 'تم إرسال الطلب إلى الخدمة.' : `الخدمة أعادت HTTP ${r.status}.`; } catch { return 'تعذر الاتصال بالخدمة الآن.'; } }
+async function appsReply(id) { const rows = serviceLinkRows().filter(([name]) => ['reactive-resume', 'suwayomi', 'vaultwarden'].includes(name)); if (!rows.length) return reply(id, 'شغّل الخدمات أولًا للحصول على روابط التطبيقات.'); return tg('sendMessage', { chat_id: id, text: 'افتح التطبيق المطلوب:', reply_markup: { inline_keyboard: rows.map(([name, url]) => [{ text: name, url }]) }, disable_web_page_preview: true }); }
 async function sendEmail(id, to, subject, text) { if (!process.env.RESEND_API_KEY) return reply(id, 'تم تجهيز الرسالة، لكن RESEND_API_KEY غير مضبوط في Railway Variables.', emailKeyboard); const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@joserv.dpdns.org', to: [to], subject, text }) }); return reply(id, r.ok ? 'تم إرسال الرسالة عبر Resend.' : 'فشل إرسال الرسالة.', emailKeyboard); }
 async function handleTelegram(update) {
   const m = update?.message; if (!m?.chat?.id) return;
   const id = String(m.chat.id), text = String(m.text || '').trim(), s = userState(id), cmd = text.split(/\s+/)[0].toLowerCase();
   if (cmd === '/start' || text === 'Start') { s.stage = null; s.loggedIn = true; s.expires = Date.now() + 86400000; return reply(id, 'أهلًا بك. اختر الخدمة من القائمة.'); }
-  if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر المتاحة:\nEmail — البريد\nبيانات السهم — EGX\nتشغيل الخدمات — تشغيل GitHub Actions\nحالة الخدمات — حالة الاختبار\n/projects /project <name> /bots /health');
+  if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر المتاحة:\nبحث أو /search — بحث عبر SearXNG\nترجمة أو /translate — ترجمة عبر LibreTranslate\nمراقبة موقع أو /watch — إضافة رابط للمراقبة\nحفظ صفحة أو /archive — حفظ رابط عبر ArchiveBox\nفتح التطبيقات — Reactive Resume وSuwayomi وVaultwarden\nتشغيل الخدمات — تشغيل GitHub Actions\nحالة الخدمات — حالة الاختبار\nروابط الخدمات — فتح الواجهات');
   if (cmd === '/projects' || text === 'Railway Projects') return reply(id, await railwayText());
   if (cmd === '/project') return reply(id, await projectText(text.split(/\s+/).slice(1).join(' ')));
   if (cmd === '/bots') return reply(id, botsText());
   if (cmd === '/services_start' || text === 'تشغيل الخدمات') return reply(id, await startServicesText());
   if (cmd === '/services_status' || text === 'حالة الخدمات') return reply(id, await servicesStatusText());
   if (cmd === '/service_links' || text === 'روابط الخدمات') return serviceLinksReply(id);
+  if (cmd === '/search' || text === 'بحث') { const q = text.replace(/^\/search\s*/i, '').trim(); if (!q) { s.stage = 'search'; return reply(id, 'اكتب كلمة البحث الآن.'); } return reply(id, await searxSearch(q)); }
+  if (cmd === '/translate' || text === 'ترجمة') { const q = text.replace(/^\/translate\s*/i, '').trim(); if (!q) { s.stage = 'translate'; return reply(id, 'اكتب النص الذي تريد ترجمته إلى الإنجليزية.'); } return reply(id, await translateText(q)); }
+  if (cmd === '/watch' || text === 'مراقبة موقع') { s.stage = 'watch'; return reply(id, 'أرسل رابط الموقع الذي تريد مراقبته.'); }
+  if (cmd === '/archive' || text === 'حفظ صفحة') { s.stage = 'archive'; return reply(id, 'أرسل رابط الصفحة التي تريد حفظها.'); }
+  if (text === 'فتح التطبيقات') return appsReply(id);
   if (text === 'Email') { s.stage = null; return reply(id, 'اختر خدمة البريد', emailKeyboard); }
   if (text === 'بيانات السهم') return reply(id, await stockText());
+  if (s.stage === 'search') { s.stage = null; return reply(id, await searxSearch(text)); }
+  if (s.stage === 'translate') { s.stage = null; return reply(id, await translateText(text)); }
+  if (s.stage === 'watch') { s.stage = null; return reply(id, await serviceAction('changedetectionio', '/api/submit', { url: text })); }
+  if (s.stage === 'archive') { s.stage = null; return reply(id, await serviceAction('archivebox', '/api/v1/archives', { url: text })); }
   if (text === 'New address') { s.stage = 'new-address'; return reply(id, 'اكتب اسم العنوان مثل support', emailKeyboard); }
   if (text === 'My addresses') return reply(id, addresses.get(id)?.join(', ') || 'لا توجد عناوين', emailKeyboard);
   if (text === 'Send email') { s.stage = 'email-to'; return reply(id, 'اكتب بريد المستلم', emailKeyboard); }
