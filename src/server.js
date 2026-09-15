@@ -61,17 +61,39 @@ async function codeforcesText(handle) {
     return [`Codeforces: ${u.handle}`, `الرتبة: ${u.rank || 'غير مصنف'}`, `التقييم: ${u.rating ?? 'غير مصنف'}`, `أعلى تقييم: ${u.maxRating ?? '—'}`, `أعلى رتبة: ${u.maxRank || '—'}`, `المساهمة: ${u.contribution ?? 0}`].join('\n');
   } catch { return 'تعذر الوصول إلى Codeforces حاليًا. حاول مرة أخرى.'; }
 }
+async function githubRequest(endpoint, options = {}) {
+  const token = process.env.GITHUB_ACTIONS_TOKEN;
+  if (!token) return { ok: false, error: 'GITHUB_ACTIONS_TOKEN غير مضبوط في Railway Variables.' };
+  const r = await fetch(`https://api.github.com${endpoint}`, { ...options, headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${token}`, 'x-github-api-version': '2022-11-28', ...(options.headers || {}) } });
+  const data = await r.json().catch(() => ({}));
+  return r.ok ? { ok: true, data } : { ok: false, error: data.message || `GitHub HTTP ${r.status}` };
+}
+function githubRepo() { return process.env.GITHUB_REPO || '2401055/email-bot'; }
+async function startServicesText() {
+  const r = await githubRequest(`/repos/${githubRepo()}/actions/workflows/compose-test.yml/dispatches`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref: 'main' }) });
+  return r.ok ? 'بدأ تشغيل الخدمات على GitHub Actions. استخدم /services_status بعد دقيقة لمتابعة الحالة.\nمهم: التشغيل مؤقت وسيُغلق بعد انتهاء الاختبار.' : `تعذر بدء الخدمات: ${r.error}`;
+}
+async function servicesStatusText() {
+  const r = await githubRequest(`/repos/${githubRepo()}/actions/runs?branch=main&per_page=1`);
+  if (!r.ok) return `تعذر قراءة الحالة: ${r.error}`;
+  const run = r.data.workflow_runs?.[0];
+  if (!run) return 'لا يوجد تشغيل للخدمات حتى الآن.';
+  const state = run.status === 'completed' ? `انتهى: ${run.conclusion}` : `جارٍ: ${run.status}`;
+  return [`حالة اختبار الخدمات: ${state}`, `Commit: ${run.head_sha.slice(0, 7)}`, `الرابط: ${run.html_url}`].join('\n');
+}
 async function sendEmail(id, to, subject, text) { if (!process.env.RESEND_API_KEY) return reply(id, 'تم تجهيز الرسالة، لكن RESEND_API_KEY غير مضبوط في Railway Variables.', emailKeyboard); const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@joserv.dpdns.org', to: [to], subject, text }) }); return reply(id, r.ok ? 'تم إرسال الرسالة عبر Resend.' : 'فشل إرسال الرسالة.', emailKeyboard); }
 async function handleTelegram(update) {
   const m = update?.message; if (!m?.chat?.id) return;
   const id = String(m.chat.id), text = String(m.text || '').trim(), s = userState(id), cmd = text.split(/\s+/)[0].toLowerCase();
   if (cmd === '/start' || text === 'Start') { s.stage = 'password'; return reply(id, 'اكتب كلمة المرور', { keyboard: [['Start']], resize_keyboard: true }); }
   if (!isLogged(id)) { if (s.stage === 'password' && process.env.BOT_LOGIN_PASSWORD && text === process.env.BOT_LOGIN_PASSWORD) { s.loggedIn = true; s.expires = Date.now() + 86400000; s.stage = null; return reply(id, 'تم تسجيل الدخول. اختر الخدمة.'); } return reply(id, process.env.BOT_LOGIN_PASSWORD ? 'اضغط Start ثم اكتب كلمة المرور' : 'BOT_LOGIN_PASSWORD غير مضبوط في Railway Variables.', { keyboard: [['Start']], resize_keyboard: true }); }
-  if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر المتاحة:\nEmail — البريد\nبيانات السهم — EGX\nCodeforces — بيانات حسابك\n/codeforces <handle>\n/projects /project <name> /bots /health');
+  if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر المتاحة:\nEmail — البريد\nبيانات السهم — EGX\nCodeforces — بيانات حسابك\n/services_start — تشغيل اختبار الخدمات\n/services_status — حالة الاختبار\n/codeforces <handle>\n/projects /project <name> /bots /health');
   if (cmd === '/projects' || text === 'Railway Projects') return reply(id, await railwayText());
   if (cmd === '/project') return reply(id, await projectText(text.split(/\s+/).slice(1).join(' ')));
   if (cmd === '/bots') return reply(id, botsText());
   if (cmd === '/codeforces' || cmd === '/cf') return reply(id, await codeforcesText(text.split(/\s+/).slice(1).join(' ')));
+  if (cmd === '/services_start') return reply(id, await startServicesText());
+  if (cmd === '/services_status') return reply(id, await servicesStatusText());
   if (text === 'Codeforces') { s.stage = 'codeforces-handle'; return reply(id, 'اكتب اسم مستخدم Codeforces، مثل tourist.'); }
   if (text === 'Email') { s.stage = null; return reply(id, 'اختر خدمة البريد', emailKeyboard); }
   if (text === 'بيانات السهم') return reply(id, await stockText());
