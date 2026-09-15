@@ -7,7 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT || 3000);
 const sessions = new Map();
 const addresses = new Map();
-const telegramKeyboard = { keyboard: [['Email'], ['بيانات السهم'], ['Codeforces'], ['تشغيل الخدمات', 'حالة الخدمات'], ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
+const telegramKeyboard = { keyboard: [['Email'], ['بيانات السهم'], ['تشغيل الخدمات', 'حالة الخدمات'], ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
 const emailKeyboard = { keyboard: [['New address', 'My addresses'], ['Send email', 'Home']], resize_keyboard: true, is_persistent: true };
 
 const bots = [
@@ -50,17 +50,6 @@ function botsText() { return ['البوتات الموجودة داخل Email Bo
 async function stockText() {
   try { const r = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/COMI.CA?interval=1d&range=1d', { headers: { 'User-Agent': 'EmailBot/1.0' } }); const x = await r.json(); const m = x.chart.result[0].meta; return `بيانات COMI (EGX)\nالسعر: ${m.regularMarketPrice ?? '-'}\nالتغير: ${m.regularMarketChangePercent ?? '-'}%`; } catch { return 'تعذر قراءة بيانات السهم حاليًا.'; }
 }
-async function codeforcesText(handle) {
-  const clean = String(handle || '').trim();
-  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(clean)) return 'اكتب اسم مستخدم Codeforces صحيحًا.';
-  try {
-    const r = await fetch(`https://codeforces.com/api/user.info?handles=${encodeURIComponent(clean)}`, { headers: { 'User-Agent': 'EmailBot/1.0' }, signal: AbortSignal.timeout(7000) });
-    const data = await r.json();
-    if (!r.ok || data.status !== 'OK' || !data.result?.[0]) return 'لم يتم العثور على حساب Codeforces بهذا الاسم.';
-    const u = data.result[0];
-    return [`Codeforces: ${u.handle}`, `الرتبة: ${u.rank || 'غير مصنف'}`, `التقييم: ${u.rating ?? 'غير مصنف'}`, `أعلى تقييم: ${u.maxRating ?? '—'}`, `أعلى رتبة: ${u.maxRank || '—'}`, `المساهمة: ${u.contribution ?? 0}`].join('\n');
-  } catch { return 'تعذر الوصول إلى Codeforces حاليًا. حاول مرة أخرى.'; }
-}
 async function githubRequest(endpoint, options = {}) {
   const token = process.env.GITHUB_ACTIONS_TOKEN;
   if (!token) return { ok: false, error: 'GITHUB_ACTIONS_TOKEN غير مضبوط في Railway Variables.' };
@@ -87,17 +76,14 @@ async function handleTelegram(update) {
   const id = String(m.chat.id), text = String(m.text || '').trim(), s = userState(id), cmd = text.split(/\s+/)[0].toLowerCase();
   if (cmd === '/start' || text === 'Start') { s.stage = 'password'; return reply(id, 'اكتب كلمة المرور', { keyboard: [['Start']], resize_keyboard: true }); }
   if (!isLogged(id)) { if (s.stage === 'password' && process.env.BOT_LOGIN_PASSWORD && text === process.env.BOT_LOGIN_PASSWORD) { s.loggedIn = true; s.expires = Date.now() + 86400000; s.stage = null; return reply(id, 'تم تسجيل الدخول. اختر الخدمة.'); } return reply(id, process.env.BOT_LOGIN_PASSWORD ? 'اضغط Start ثم اكتب كلمة المرور' : 'BOT_LOGIN_PASSWORD غير مضبوط في Railway Variables.', { keyboard: [['Start']], resize_keyboard: true }); }
-  if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر المتاحة:\nEmail — البريد\nبيانات السهم — EGX\nCodeforces — بيانات حسابك\n/services_start — تشغيل اختبار الخدمات\n/services_status — حالة الاختبار\n/codeforces <handle>\n/projects /project <name> /bots /health');
+  if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر المتاحة:\nEmail — البريد\nبيانات السهم — EGX\nتشغيل الخدمات — تشغيل GitHub Actions\nحالة الخدمات — حالة الاختبار\n/projects /project <name> /bots /health');
   if (cmd === '/projects' || text === 'Railway Projects') return reply(id, await railwayText());
   if (cmd === '/project') return reply(id, await projectText(text.split(/\s+/).slice(1).join(' ')));
   if (cmd === '/bots') return reply(id, botsText());
-  if (cmd === '/codeforces' || cmd === '/cf') return reply(id, await codeforcesText(text.split(/\s+/).slice(1).join(' ')));
   if (cmd === '/services_start' || text === 'تشغيل الخدمات') return reply(id, await startServicesText());
   if (cmd === '/services_status' || text === 'حالة الخدمات') return reply(id, await servicesStatusText());
-  if (text === 'Codeforces') { s.stage = 'codeforces-handle'; return reply(id, 'اكتب اسم مستخدم Codeforces، مثل tourist.'); }
   if (text === 'Email') { s.stage = null; return reply(id, 'اختر خدمة البريد', emailKeyboard); }
   if (text === 'بيانات السهم') return reply(id, await stockText());
-  if (s.stage === 'codeforces-handle') { s.stage = null; return reply(id, await codeforcesText(text)); }
   if (text === 'New address') { s.stage = 'new-address'; return reply(id, 'اكتب اسم العنوان مثل support', emailKeyboard); }
   if (text === 'My addresses') return reply(id, addresses.get(id)?.join(', ') || 'لا توجد عناوين', emailKeyboard);
   if (text === 'Send email') { s.stage = 'email-to'; return reply(id, 'اكتب بريد المستلم', emailKeyboard); }
@@ -116,8 +102,7 @@ const server = http.createServer(async (req, res) => {
   if (u.pathname === '/api/bots') return send(res, 200, JSON.stringify({ ok: true, bots }, null, 2));
   if (u.pathname === '/api/railway-services') return send(res, 200, JSON.stringify({ ok: true, services: railwayServices }, null, 2));
   if (u.pathname === '/api/projects') return send(res, 200, JSON.stringify({ ok: true, prepared: railwayServices, inventory: projectInventory }, null, 2));
-  if (u.pathname === '/api/bot-menu') return send(res, 200, JSON.stringify({ ok: true, original: ['Email', 'بيانات السهم'], new: ['Codeforces', 'Railway Projects', '/codeforces <handle>', '/projects', '/project <name>', '/bots', '/health'], bots }, null, 2));
-  if (u.pathname === '/api/codeforces') { const handle = u.searchParams.get('handle'); if (!handle) return send(res, 400, JSON.stringify({ ok: false, error: 'handle is required' })); return send(res, 200, JSON.stringify({ ok: true, handle, profile: await codeforcesText(handle) })); }
+  if (u.pathname === '/api/bot-menu') return send(res, 200, JSON.stringify({ ok: true, original: ['Email', 'بيانات السهم'], new: ['تشغيل الخدمات', 'حالة الخدمات', 'Railway Projects', '/projects', '/project <name>', '/bots', '/health'], bots }, null, 2));
   if (u.pathname.startsWith('/cf/')) { const name = u.pathname.split('/')[2]; const b = bots.find(x => x.name === name); if (!b) return send(res, 404, JSON.stringify({ ok: false, error: 'unknown bot' })); return proxy(req, res, `${b.url}/${u.pathname.split('/').slice(3).join('/')}${u.search}`); }
   const file = u.pathname === '/' ? '/index.html' : u.pathname; const full = path.resolve(root, 'site', file.slice(1)); if (!full.startsWith(path.resolve(root, 'site')) || !fs.existsSync(full)) return send(res, 404, 'Not Found', 'text/plain'); return send(res, 200, fs.readFileSync(full), mime[path.extname(full)] || 'application/octet-stream');
 });
