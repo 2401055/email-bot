@@ -71,7 +71,7 @@ services:
       context: ./railway-services/archivebox
     image: email-bot/archivebox:local
     restart: unless-stopped
-    command: server --host 0.0.0.0 --port 8000
+    command: server --quick-init 0.0.0.0:8000
     ports:
       - "8000:8000"
     volumes:

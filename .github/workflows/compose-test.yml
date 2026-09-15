@@ -47,16 +47,23 @@ jobs:
       - name: Check service endpoints
         run: |
           set +e
-          for endpoint in \
-            'http://127.0.0.1:8080' \
-            'http://127.0.0.1:3000' \
-            'http://127.0.0.1:5000' \
-            'http://127.0.0.1:4567' \
-            'http://127.0.0.1:5001' \
-            'http://127.0.0.1:8000' \
-            'http://127.0.0.1:8081'; do
-            printf '%s -> ' "$endpoint"
-            curl --max-time 10 -sS -o /dev/null -w '%{http_code}\n' "$endpoint" || echo 'unreachable'
+          for item in \
+            'searxng|http://127.0.0.1:8080' \
+            'reactive-resume|http://127.0.0.1:3000' \
+            'changedetection|http://127.0.0.1:5000' \
+            'suwayomi|http://127.0.0.1:4567' \
+            'libretranslate|http://127.0.0.1:5001' \
+            'archivebox|http://127.0.0.1:8000' \
+            'vaultwarden|http://127.0.0.1:8081'; do
+            service="${item%%|*}"
+            endpoint="${item#*|}"
+            printf '%s -> ' "$service"
+            for attempt in $(seq 1 36); do
+              code=$(curl --max-time 5 -sS -o /dev/null -w '%{http_code}' "$endpoint")
+              if [ "$code" != "000" ]; then printf '%s (attempt %s)\n' "$code" "$attempt"; break; fi
+              sleep 5
+            done
+            if [ "$code" = "000" ]; then echo 'unreachable after 180s'; fi
           done
 
       - name: Show logs for failed services
