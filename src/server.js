@@ -7,7 +7,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT || 3000);
 const sessions = new Map();
 const addresses = new Map();
-const telegramKeyboard = { keyboard: [['Email'], ['بيانات السهم'], ['تشغيل الخدمات', 'حالة الخدمات'], ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
+let temporaryServiceLinks = {};
+const telegramKeyboard = { keyboard: [['Email'], ['بيانات السهم'], ['تشغيل الخدمات', 'حالة الخدمات'], ['روابط الخدمات'], ['Railway Projects'], ['Help']], resize_keyboard: true, is_persistent: true };
 const emailKeyboard = { keyboard: [['New address', 'My addresses'], ['Send email', 'Home']], resize_keyboard: true, is_persistent: true };
 
 const bots = [
@@ -70,6 +71,8 @@ async function servicesStatusText() {
   const state = run.status === 'completed' ? `انتهى: ${run.conclusion}` : `جارٍ: ${run.status}`;
   return [`حالة اختبار الخدمات: ${state}`, `Commit: ${run.head_sha.slice(0, 7)}`, `الرابط: ${run.html_url}`].join('\n');
 }
+function serviceLinkRows() { return Object.entries(temporaryServiceLinks).filter(([, url]) => /^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/?$/i.test(url)); }
+async function serviceLinksReply(id) { const rows = serviceLinkRows(); if (!rows.length) return reply(id, 'لا توجد روابط خدمات الآن. اضغط «تشغيل الخدمات» وانتظر حوالي دقيقة.'); return tg('sendMessage', { chat_id: id, text: 'افتح الخدمة المطلوبة:', reply_markup: { inline_keyboard: rows.map(([name, url]) => [{ text: name, url }]) }, disable_web_page_preview: true }); }
 async function sendEmail(id, to, subject, text) { if (!process.env.RESEND_API_KEY) return reply(id, 'تم تجهيز الرسالة، لكن RESEND_API_KEY غير مضبوط في Railway Variables.', emailKeyboard); const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@joserv.dpdns.org', to: [to], subject, text }) }); return reply(id, r.ok ? 'تم إرسال الرسالة عبر Resend.' : 'فشل إرسال الرسالة.', emailKeyboard); }
 async function handleTelegram(update) {
   const m = update?.message; if (!m?.chat?.id) return;
@@ -81,6 +84,7 @@ async function handleTelegram(update) {
   if (cmd === '/bots') return reply(id, botsText());
   if (cmd === '/services_start' || text === 'تشغيل الخدمات') return reply(id, await startServicesText());
   if (cmd === '/services_status' || text === 'حالة الخدمات') return reply(id, await servicesStatusText());
+  if (cmd === '/service_links' || text === 'روابط الخدمات') return serviceLinksReply(id);
   if (text === 'Email') { s.stage = null; return reply(id, 'اختر خدمة البريد', emailKeyboard); }
   if (text === 'بيانات السهم') return reply(id, await stockText());
   if (text === 'New address') { s.stage = 'new-address'; return reply(id, 'اكتب اسم العنوان مثل support', emailKeyboard); }
@@ -101,7 +105,8 @@ const server = http.createServer(async (req, res) => {
   if (u.pathname === '/api/bots') return send(res, 200, JSON.stringify({ ok: true, bots }, null, 2));
   if (u.pathname === '/api/railway-services') return send(res, 200, JSON.stringify({ ok: true, services: railwayServices }, null, 2));
   if (u.pathname === '/api/projects') return send(res, 200, JSON.stringify({ ok: true, prepared: railwayServices, inventory: projectInventory }, null, 2));
-  if (u.pathname === '/api/bot-menu') return send(res, 200, JSON.stringify({ ok: true, original: ['Email', 'بيانات السهم'], new: ['تشغيل الخدمات', 'حالة الخدمات', 'Railway Projects', '/projects', '/project <name>', '/bots', '/health'], bots }, null, 2));
+  if (u.pathname === '/api/bot-menu') return send(res, 200, JSON.stringify({ ok: true, original: ['Email', 'بيانات السهم'], new: ['تشغيل الخدمات', 'حالة الخدمات', 'روابط الخدمات', 'Railway Projects', '/projects', '/project <name>', '/bots', '/health'], bots }, null, 2));
+  if (u.pathname === '/api/service-links' && req.method === 'POST') { try { const data = JSON.parse(await body(req)); const links = Object.fromEntries(Object.entries(data.links || {}).filter(([, url]) => /^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/?$/i.test(String(url)))); temporaryServiceLinks = links; return send(res, 200, JSON.stringify({ ok: true, count: Object.keys(links).length })); } catch { return send(res, 400, JSON.stringify({ ok: false, error: 'bad links payload' })); } }
   if (u.pathname.startsWith('/cf/')) { const name = u.pathname.split('/')[2]; const b = bots.find(x => x.name === name); if (!b) return send(res, 404, JSON.stringify({ ok: false, error: 'unknown bot' })); return proxy(req, res, `${b.url}/${u.pathname.split('/').slice(3).join('/')}${u.search}`); }
   const file = u.pathname === '/' ? '/index.html' : u.pathname; const full = path.resolve(root, 'site', file.slice(1)); if (!full.startsWith(path.resolve(root, 'site')) || !fs.existsSync(full)) return send(res, 404, 'Not Found', 'text/plain'); return send(res, 200, fs.readFileSync(full), mime[path.extname(full)] || 'application/octet-stream');
 });

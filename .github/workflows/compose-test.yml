@@ -66,6 +66,51 @@ jobs:
             if [ "$code" = "000" ]; then echo 'unreachable after 180s'; fi
           done
 
+      - name: Start public temporary service links
+        run: |
+          set -e
+          sudo curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+          sudo chmod +x /usr/local/bin/cloudflared
+          mkdir -p /tmp/service-tunnels
+          : > service-urls.txt
+          for item in \
+            'SearXNG|8080' \
+            'Reactive Resume|3000' \
+            'changedetection.io|5000' \
+            'Suwayomi|4567' \
+            'LibreTranslate|5001' \
+            'ArchiveBox|8000' \
+            'Vaultwarden|8081'; do
+            name="${item%%|*}"
+            port="${item#*|}"
+            slug=$(printf '%s' "$name" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-')
+            cloudflared tunnel --no-autoupdate --url "http://127.0.0.1:${port}" > "/tmp/service-tunnels/${slug}.log" 2>&1 &
+            echo $! > "/tmp/service-tunnels/${slug}.pid"
+          done
+          sleep 12
+          for log in /tmp/service-tunnels/*.log; do
+            url=$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' "$log" | head -1 || true)
+            slug=$(basename "$log" .log)
+            if [ -n "$url" ]; then printf '%s|%s\n' "$slug" "$url" | tee -a service-urls.txt; else echo "${slug}|unavailable" | tee -a service-urls.txt; fi
+          done
+          cat service-urls.txt >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY'
+          import json
+          links = {}
+          for line in open('service-urls.txt'):
+              key, url = line.rstrip().split('|', 1)
+              links[key] = url
+          print(json.dumps(links))
+          PY
+          payload=$(python3 -c 'import json; print(json.dumps({"links": {k:v for k,v in (line.rstrip().split("|",1) for line in open("service-urls.txt"))}}))')
+          curl -fsS -X POST 'https://email-bot.joserv.dpdns.org/api/service-links' -H 'content-type: application/json' --data "$payload"
+      - name: Upload temporary service links
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-urls
+          path: service-urls.txt
+          retention-days: 1
+
       - name: Keep temporary services running
         run: |
           echo 'Services are running temporarily for 15 minutes.'
