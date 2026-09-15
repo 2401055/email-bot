@@ -38,8 +38,7 @@ const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 function send(res, status, body, type = 'application/json') { res.writeHead(status, { 'content-type': type }); res.end(body); }
 async function body(req) { const chunks = []; for await (const c of req) chunks.push(c); return Buffer.concat(chunks).toString('utf8'); }
 function userState(id) { if (!sessions.has(String(id))) sessions.set(String(id), { loggedIn: false, stage: null, expires: 0 }); return sessions.get(String(id)); }
-function isLogged(id) { const s = userState(id); return s.loggedIn && s.expires > Date.now(); }
-function menuFor(id) { return isLogged(id) ? telegramKeyboard : { keyboard: [['Start']], resize_keyboard: true }; }
+function menuFor() { return telegramKeyboard; }
 function configuredSecret(name) { return String(process.env[name] || '').trim().replace(/^(["'])(.*)\1$/, '$2').trim(); }
 async function tg(method, payload) { const token = process.env.TELEGRAM_BOT_TOKEN; if (!token) return false; const r = await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }); return r.ok; }
 async function reply(id, text, keyboard = menuFor(id)) { return tg('sendMessage', { chat_id: id, text, reply_markup: keyboard, disable_web_page_preview: true }); }
@@ -75,8 +74,7 @@ async function sendEmail(id, to, subject, text) { if (!process.env.RESEND_API_KE
 async function handleTelegram(update) {
   const m = update?.message; if (!m?.chat?.id) return;
   const id = String(m.chat.id), text = String(m.text || '').trim(), s = userState(id), cmd = text.split(/\s+/)[0].toLowerCase();
-  if (cmd === '/start' || text === 'Start') { s.stage = 'password'; return reply(id, 'اكتب كلمة المرور الآن', { keyboard: [['Start']], resize_keyboard: true }); }
-  if (!isLogged(id)) { const configured = configuredSecret('BOT_LOGIN_PASSWORD'); if (configured && text.trim() === configured) { s.loggedIn = true; s.expires = Date.now() + 86400000; s.stage = null; return reply(id, 'تم تسجيل الدخول. اختر الخدمة.'); } if (!configured) return reply(id, 'BOT_LOGIN_PASSWORD غير مضبوط في Railway Variables.', { keyboard: [['Start']], resize_keyboard: true }); return reply(id, s.stage === 'password' ? 'كلمة المرور غير صحيحة. اضغط Start وحاول مرة أخرى.' : 'اضغط Start أولًا ثم اكتب كلمة المرور.', { keyboard: [['Start']], resize_keyboard: true }); }
+  if (cmd === '/start' || text === 'Start') { s.stage = null; s.loggedIn = true; s.expires = Date.now() + 86400000; return reply(id, 'أهلًا بك. اختر الخدمة من القائمة.'); }
   if (cmd === '/help' || text === 'Help') return reply(id, 'الأوامر المتاحة:\nEmail — البريد\nبيانات السهم — EGX\nتشغيل الخدمات — تشغيل GitHub Actions\nحالة الخدمات — حالة الاختبار\n/projects /project <name> /bots /health');
   if (cmd === '/projects' || text === 'Railway Projects') return reply(id, await railwayText());
   if (cmd === '/project') return reply(id, await projectText(text.split(/\s+/).slice(1).join(' ')));
