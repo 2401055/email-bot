@@ -1,14 +1,6 @@
 name: Railway infrastructure
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.railway/**'
-      - 'railway-services/**'
-      - 'Dockerfile'
-      - 'package.json'
-      - 'package-lock.json'
   pull_request:
     types: [opened, synchronize, reopened, closed]
     paths:
@@ -26,16 +18,6 @@ permissions:
   id-token: write
 
 jobs:
-  apply-on-main:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: railwayapp/config@v1
-        with:
-          command: apply
-          railway-token: ${{ secrets.RAILWAY_TOKEN }}
-
   plan:
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
