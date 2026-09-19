@@ -59,11 +59,7 @@ async function githubRequest(endpoint, options = {}) {
   return r.ok ? { ok: true, data } : { ok: false, error: data.message || `GitHub HTTP ${r.status}` };
 }
 function githubRepo() { return process.env.GITHUB_REPO || '2401055/email-bot'; }
-async function startServicesText() {
-  const r = await githubRequest(`/repos/${githubRepo()}/actions/workflows/compose-test.yml/dispatches`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref: 'main' }) });
-  return r.ok ? 'بدأ تشغيل الخدمات على GitHub Actions. استخدم /services_status بعد دقيقة لمتابعة الحالة.\nمهم: التشغيل مؤقت وسيُغلق بعد انتهاء الاختبار.' : `تعذر بدء الخدمات: ${r.error}`;
-}
-async function servicesStatusText() {
+async function startServicesText() { const rows = await Promise.all(railwayServices.map(async x => { const h = await serviceHealth(x); return `${x.title}: ${h.state}`; })); return ['الخدمات تُشغّل من Railway وتُستخدم مباشرة من البوت:', ...rows, '', 'أضف روابط الخدمات في Railway Variables إذا ظهر أي عنصر غير مربوط.'].join('\n'); } async function servicesStatusText() {
   const r = await githubRequest(`/repos/${githubRepo()}/actions/workflows/compose-test.yml/runs?branch=main&per_page=1`);
   if (!r.ok) return `تعذر قراءة الحالة: ${r.error}`;
   const run = r.data.workflow_runs?.[0];
